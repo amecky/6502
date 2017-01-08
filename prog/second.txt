@@ -1,0 +1,9 @@
+LDA #$c0
+TAX
+INX
+STX $0201
+ADC #$c4
+LDX #$02
+STA $0200
+STA $0200,X
+BRK
