@@ -16,15 +16,20 @@
 
 int _tmain(int argc, _TCHAR* argv[]) {
 	vm::VirtualMachine machine;
-	//machine.parseFile("test");
 	int nc = 0;
-	int size = machine.parse("LDA #$C0\nSTA $0200\n",&nc);	
-	printf("size: %d commands: %d\n", size, nc);
+	machine.parseFile("prog\\branching.txt");
+	machine.run(0x600);
+	machine.dump(0x200, 8);
+	//int size = machine.parse("LDA #$C0\nSTA $0200\nTAX\nSTX $0201\n",&nc);	
+	//printf("size: %d commands: %d\n", size, nc);
+	/*
 	int pc = 0x600;
 	for (int i = 0; i < nc; ++i) {
 		pc = machine.step(pc);
 		machine.dumpRegisters();
 	}
+	*/
+	//machine.disassemble();
 	/*
 	if (machine.load("bin\\second.prg")) {
 		machine.run();

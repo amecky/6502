@@ -1,6 +1,7 @@
 #pragma once
 #include <stdio.h>
 #include <vector>
+#include <stdint.h>
 
 namespace vm {
 
@@ -67,8 +68,15 @@ namespace vm {
 		void write(int idx, uint8_t v) {
 			mem[idx] = v;
 		}
+
 		uint8_t read(int idx) const {
 			return mem[idx];
+		}
+
+		int readInt(int idx) const {
+			uint8_t upper = read(idx + 1);
+			int data = read(idx) + (upper << 8);
+			return data;
 		}
 
 		void push(uint8_t v) {
@@ -209,6 +217,27 @@ namespace vm {
 	}
 
 	// ------------------------------------------
+	// CPX
+	// ------------------------------------------
+	static int cpx(Context* ctx, int data) {
+		printf("=> CPX - data: %d\n",data);
+		if (ctx->registers[1] == data) {
+			ctx->setFlag(Flags::Z);
+		}
+		else {
+			ctx->clearFlag(Flags::Z);
+		}
+		if (ctx->registers[1] >= data) {
+			ctx->setFlag(Flags::C);
+		}
+		else {
+			ctx->clearFlag(Flags::C);
+		}
+		// FIXME: negative flag handling
+		return 0;
+	}
+
+	// ------------------------------------------
 	// DEY
 	// ------------------------------------------
 	static int dey(Context* ctx, int pc) {
@@ -229,6 +258,28 @@ namespace vm {
 		return -1;
 	}
 
+	// ------------------------------------------
+	// BNE
+	// ------------------------------------------
+	static int bne(Context* ctx, int data) {
+		printf("=> BNE - data: %d\n", data);
+		if (ctx->isSet(Flags::Z)) {
+			return 0;
+		}
+		return data;
+	}
+
+	// ------------------------------------------
+	// BEQ
+	// ------------------------------------------
+	static int beq(Context* ctx, int data) {
+		printf("=> BEQ - data: %d\n", data);
+		if (ctx->isSet(Flags::Z)) {
+			return data;
+		}
+		return 0;
+	}
+
 
 	// -----------------------------------------------------
 	// Array of all supported commands with function pointer
@@ -243,7 +294,7 @@ namespace vm {
 		{ "BEQ", &nop, 0 },
 		{ "BIT", &nop, 0 },
 		{ "BMI", &nop, 0 },
-		{ "BNE", &nop, 0 },
+		{ "BNE", &bne, 1 << RELATIVE_ADR },
 		{ "BPL", &nop, 0 },
 		{ "BRK", &brk, 0 },
 		{ "BVC", &nop, 0 },
@@ -253,7 +304,7 @@ namespace vm {
 		{ "CLI", &nop, 0 },
 		{ "CLV", &nop, 0 },
 		{ "CMP", &nop, 0 },
-		{ "CPX", &nop, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ABSOLUTE_ADR },
+		{ "CPX", &cpx, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ABSOLUTE_ADR },
 		{ "CPY", &nop, 0 },
 		{ "DEC", &dec, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
 		{ "DEX", &dex, 0 },
@@ -314,8 +365,21 @@ namespace vm {
 	// The number of bytes of data for every addressing
 	// mode
 	// -----------------------------------------------------
+	/*
+	NONE,
+	IMMEDIDATE,
+	ABSOLUTE_ADR,
+	ABSOLUTE_X,
+	ABSOLUTE_Y,
+	ZERO_PAGE,
+	ZERO_PAGE_X,
+	ZERO_PAGE_Y,
+	INDIRECT_X,
+	INDIRECT_Y,
+	RELATIVE_ADR
+	*/
 	const static int DATA_SIZE[] = {
-		0, 1, 2, 3, 3, 1, 2, 2, 4, 4, 1
+		0, 1, 2, 2, 2, 1, 1, 1, 2, 2, 1
 	};
 
 	
@@ -339,21 +403,23 @@ namespace vm {
 		{ 0, IMMEDIDATE,   0x69 },
 		{ 0, ZERO_PAGE,    0x65 },
 		{ 0, ZERO_PAGE_X,  0x75 },
-		{ 0, ABSOLUTE_ADR,     0x6D },
+		{ 0, ABSOLUTE_ADR, 0x6D },
 		{ 0, ABSOLUTE_X,   0x7D },
 		{ 0, ABSOLUTE_Y,   0x79 },
 		{ 0, INDIRECT_X,   0x61 },
 		{ 0, INDIRECT_Y,   0x71 },
+		// BNE
+		{ 8, RELATIVE_ADR, 0xD0 },
 		// BRK
 		{ 10, NONE,        0x00 },
 		// CPX
 		{ 18, IMMEDIDATE,  0xE0 },
 		{ 18, ZERO_PAGE,   0xE4 },
-		{ 18, ABSOLUTE_ADR,    0xEC },
+		{ 18, ABSOLUTE_ADR,0xEC },
 		// DEC
 		{ 20, ZERO_PAGE,   0xC6 },
 		{ 20, ZERO_PAGE_X, 0xD6 },
-		{ 20, ABSOLUTE_ADR,    0xCE },
+		{ 20, ABSOLUTE_ADR,0xCE },
 		{ 20, ABSOLUTE_X,  0xDE },
 		// DEX
 		{ 21, NONE,        0xCA },
@@ -362,7 +428,7 @@ namespace vm {
 		// INC
 		{ 24, ZERO_PAGE,   0xE6 },
 		{ 24, ZERO_PAGE_X, 0xF6 },
-		{ 24, ABSOLUTE_ADR,    0xEE },
+		{ 24, ABSOLUTE_ADR,0xEE },
 		{ 24, ABSOLUTE_X,  0xFE },
 		// INX
 		{ 25, NONE,        0xE8 },
@@ -372,7 +438,7 @@ namespace vm {
 		{ 29, IMMEDIDATE,  0xA9 },
 		{ 29, ZERO_PAGE,   0xA5 },
 		{ 29, ZERO_PAGE_X, 0xB5 },
-		{ 29, ABSOLUTE_ADR,    0xAD },
+		{ 29, ABSOLUTE_ADR,0xAD },
 		{ 29, ABSOLUTE_X,  0xBD },
 		{ 29, ABSOLUTE_Y,  0xB9 },
 		{ 29, INDIRECT_X,  0xA1 },
@@ -381,13 +447,13 @@ namespace vm {
 		{ 30, IMMEDIDATE,  0xA2 },
 		{ 30, ZERO_PAGE,   0xA6 },
 		{ 30, ZERO_PAGE_Y, 0xB6 },
-		{ 30, ABSOLUTE_ADR,    0xAE },
+		{ 30, ABSOLUTE_ADR,0xAE },
 		{ 30, ABSOLUTE_Y,  0xBE },
 		// LDY
 		{ 31, IMMEDIDATE,  0xA0 },
 		{ 31, ZERO_PAGE,   0xA4 },
 		{ 31, ZERO_PAGE_X, 0xB4 },
-		{ 31, ABSOLUTE_ADR,    0xAC },
+		{ 31, ABSOLUTE_ADR,0xAC },
 		{ 31, ABSOLUTE_X,  0xBC },
 		// PHA
 		{ 35, NONE,        0x48 },
@@ -396,7 +462,7 @@ namespace vm {
 		// STA
 		{ 47, ZERO_PAGE,   0x85 },
 		{ 47, ZERO_PAGE_X, 0x95 },
-		{ 47, ABSOLUTE_ADR,    0x8D },
+		{ 47, ABSOLUTE_ADR,0x8D },
 		{ 47, ABSOLUTE_X,  0x9D },
 		{ 47, ABSOLUTE_Y,  0x99 },
 		{ 47, INDIRECT_X,  0x81 },
@@ -404,11 +470,11 @@ namespace vm {
 		// STX
 		{ 48, ZERO_PAGE,   0x86 },
 		{ 48, ZERO_PAGE_Y, 0x96 },
-		{ 48, ABSOLUTE_ADR,    0x8E },
+		{ 48, ABSOLUTE_ADR,0x8E },
 		// STY
 		{ 49, ZERO_PAGE,   0x84 },
 		{ 49, ZERO_PAGE_X, 0x94 },
-		{ 49, ABSOLUTE_ADR,    0x8C },
+		{ 49, ABSOLUTE_ADR,0x8C },
 		// TAX
 		{ 50, NONE,        0xAA },
 		// TAY
@@ -425,6 +491,16 @@ namespace vm {
 		{ 100, NONE,        0xFF },
 	};
 
+	const uint32_t FNV_Prime = 0x01000193; //   16777619
+	const uint32_t FNV_Seed = 0x811C9DC5; // 2166136261
+
+	static uint32_t fnv1a(const char* text, int len, uint32_t hash = FNV_Seed) {
+		const unsigned char* ptr = (const unsigned char*)text;
+		for (int i = 0; i < len; ++i ) {
+			hash = (ptr[i] ^ hash) * FNV_Prime;
+		}
+		return hash;
+	}
 	// -----------------------------------------------------
 	// Token
 	// -----------------------------------------------------
@@ -432,14 +508,13 @@ namespace vm {
 
 		enum TokenType { EMPTY, NUMBER, STRING, DOLLAR, HASHTAG, OPEN_BRACKET, CLOSE_BRACKET, COMMA, X, Y, SEPARATOR, COMMAND };
 
-		Token(TokenType t) : type(t), value(0), start(0), size(0) {}
-		Token(TokenType t, int v) : type(t), value(v), start(0), size(0) {}
-		Token(TokenType t, int st, int s) : type(t), value(0), start(st), size(s) {}
+		Token(TokenType t) : type(t), value(0), hash(0) {}
+		Token(TokenType t, int v) : type(t), value(v), hash(0) {}
+		//Token(TokenType t, uint32_t st, int s) : type(t), value(0), hash(st), size(s) {}
 
 		TokenType type;
 		int value;
-		int start;
-		int size;
+		uint32_t hash;
 		int line;
 	};
 
@@ -571,10 +646,13 @@ namespace vm {
 					const char *identifier = p;
 					while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z'))
 						p++;
-					token = Token(Token::STRING, identifier - _text, p - identifier);
+					token = Token(Token::STRING);// , identifier - _text, p - identifier);
 					int cmdIdx = find_command(identifier);
 					if (cmdIdx != -1) {
 						token = Token(Token::COMMAND, cmdIdx);
+					}
+					else {
+						token.hash = fnv1a(identifier, p - identifier);
 					}
 				}
 				else if (isHex(*p)) {
@@ -759,16 +837,56 @@ namespace vm {
 			else if (next.type == Token::OPEN_BRACKET) {
 
 			}
+			else if (next.type == Token::STRING) {
+				return AddressingMode::RELATIVE_ADR;
+			}
 		}
 		return AddressingMode::NONE;
 	}
 
+	// -----------------------------------------------------------------
+	// disassemble memory
+	// -----------------------------------------------------------------
+	static void disassemble_memory(Context* ctx, int num) {
+		int pc = 0x600;
+		int end = pc + num;
+		while (pc < end) {
+			uint8_t hex = ctx->read(pc);
+			const CommandMapping& mapping = get_command_mapping(hex);
+			const Command& cmd = COMMANDS[mapping.cmd];
+			printf("%04X ",pc);
+			printf("%s ", cmd.name);
+			switch (mapping.mode) {
+				case IMMEDIDATE: printf("#$%02X",ctx->read(pc+1)); break;
+				case ABSOLUTE_ADR : printf("$%04X",ctx->readInt(pc+1)); break;
+				case ABSOLUTE_X: printf("$%04X,X", ctx->readInt(pc + 1)); break;
+				case ABSOLUTE_Y: printf("$%04X,Y", ctx->readInt(pc + 1)); break;
+				case ZERO_PAGE: printf("$%02X", ctx->read(pc + 1)); break;
+				case ZERO_PAGE_X: printf("$%02X,X", ctx->read(pc + 1)); break;
+				case ZERO_PAGE_Y: printf("$%02X,Y", ctx->read(pc + 1)); break;
+				case INDIRECT_X: printf("$(%04X),X", ctx->readInt(pc + 1)); break;
+				case INDIRECT_Y: printf("$(%04X),Y", ctx->readInt(pc + 1)); break;
+				case RELATIVE_ADR: printf("$%02X", ctx->read(pc + 1)); break;
+			}
+			printf("\n");
+			pc += DATA_SIZE[mapping.mode] + 1;
+		}
+	}
+
+	
+
+	struct LabelDefinition {
+		int pc;
+		uint32_t hash;
+	};
 	// -----------------------------------------------------------------
 	// convert tokens 
 	// -----------------------------------------------------------------
 	static int assemble(const Tokenizer & tokenizer, Context* ctx, int* numCommands) {
 		printf("tokens: %d\n", tokenizer.num());
 		int pc = 0x600;
+		std::vector<LabelDefinition> definitions;
+		std::vector<LabelDefinition> branches;
 		for (size_t i = 0; i < tokenizer.num(); ++i) {
 			const Token& t = tokenizer.get(i);
 			printf("%d = %s (line: %d)\n", i, translate_token_tpye(t), t.line);
@@ -796,6 +914,44 @@ namespace vm {
 				else if (mode == AddressingMode::ZERO_PAGE || mode == AddressingMode::ZERO_PAGE_X || mode == AddressingMode::ZERO_PAGE_Y) {
 					const Token& next = tokenizer.get(i + 1);
 					ctx->write(pc++, low_value(next.value));
+				}
+				else if (mode == AddressingMode::RELATIVE_ADR) {
+					const Token& next = tokenizer.get(i + 1);
+					LabelDefinition def;
+					def.hash = next.hash;
+					def.pc = pc;
+					branches.push_back(def);
+					ctx->write(pc++, 0);
+				}
+			}
+			else if (t.type == Token::STRING) {
+				const Token& next = tokenizer.get(i + 1);
+				if (next.type == Token::SEPARATOR) {
+					printf("=> label definition at %X\n", pc);
+					LabelDefinition def;
+					def.hash = t.hash;
+					def.pc = pc;
+					definitions.push_back(def);
+				}
+				//else {
+					//printf("found string at %X\n", pc);
+				//}
+			}
+		}
+		printf("labels: %d\n", definitions.size());
+		printf("branches: %d\n", branches.size());
+		for (size_t i = 0; i < branches.size();++i) {
+			const LabelDefinition& branch = branches[i];
+			printf("branch %d\n", branch.hash);
+			int idx = -1;
+			for (size_t j = 0; j < definitions.size(); ++j) {
+				if (definitions[j].hash == branch.hash) {
+					int diff = definitions[j].pc - branch.pc;
+					if (diff < 0) {
+						diff = 255 - diff;
+					}
+					printf("found matching branch/label diff: %d\n",diff);					
+					ctx->write(branch.pc, diff);
 				}
 			}
 		}
@@ -825,7 +981,10 @@ namespace vm {
 		VirtualMachine::~VirtualMachine() {
 		}
 
-		bool VirtualMachine::load(const char* fileName, int pc) {
+		// ---------------------------------------------------------
+		//  load file
+		// ---------------------------------------------------------
+		bool VirtualMachine::load(const char* fileName, int pc = 0x600) {
 			FILE* fp = fopen(fileName, "rb");
 			if (fp) {
 				fread(&_num, sizeof(int), 1, fp);
@@ -842,6 +1001,9 @@ namespace vm {
 			return false;
 		}
 
+		// ---------------------------------------------------------
+		//  save file
+		// ---------------------------------------------------------
 		void VirtualMachine::save(const char* fileName) {
 			FILE* fp = fopen(fileName, "wb");
 			if (fp) {
@@ -859,38 +1021,47 @@ namespace vm {
 		//  parse file
 		// ---------------------------------------------------------
 		void VirtualMachine::parseFile(const char* fileName) {
-			char buffer[256];
-			sprintf(buffer, "prog\\%s.txt", fileName);
+			//char buffer[256];
+			//sprintf(buffer, "prog\\%s.txt", fileName);
 			Tokenizer tokenizer;
-			if (tokenizer.parseFile(buffer)) {
-				int num = assemble(tokenizer, &_ctx, nullptr);
-				sprintf(buffer, "bin\\%s.prg", fileName);
-				save(buffer);
-				memoryDump(0x600, num);
+			if (tokenizer.parseFile(fileName)) {
+				int nc = 0;
+				_num = assemble(tokenizer, &_ctx, &nc);
+				//sprintf(buffer, "bin\\%s.prg", fileName);
+				//save(buffer);
+				memoryDump(0x600, _num);
+			}
+			else {
+				printf("ERROR: cannot laod file: '%s'\n", fileName);
 			}
 		}
 
+		void VirtualMachine::disassemble() {
+			disassemble_memory(&_ctx, _num);
+		}
 		// ---------------------------------------------------------
 		//  parse text
 		// ---------------------------------------------------------
 		int VirtualMachine::parse(const char* text, int* numCommands) {
 			Tokenizer tokenizer;
-			int num = -1;
 			if (tokenizer.parse(text)) {
-				num = assemble(tokenizer, &_ctx, numCommands);
-				memoryDump(0x600, num);
+				_num = assemble(tokenizer, &_ctx, numCommands);
+				memoryDump(0x600, _num);
 			}
-			return num;
+			return _num;
 		}
 
+		// ---------------------------------------------------------
+		//  dump registers and memory
+		// ---------------------------------------------------------
 		void VirtualMachine::dump(int pc, int num) {
-			printf("------------- Dump -------------\n");
-			printf("A: %X\n", _ctx.registers[0]);
-			printf("X: %X\n", _ctx.registers[1]);
-			printf("Y: %X\n", _ctx.registers[2]);
+			dumpRegisters();
 			memoryDump(pc, num);
 		}
 
+		// ---------------------------------------------------------
+		//  dump registers 
+		// ---------------------------------------------------------
 		void VirtualMachine::dumpRegisters() {
 			printf("------------- Dump -------------\n");
 			printf("A: %X\n", _ctx.registers[0]);
@@ -907,6 +1078,7 @@ namespace vm {
 			}
 			printf("\n");
 		}
+
 		// ---------------------------------------------------------
 		//  memory dump
 		// ---------------------------------------------------------
@@ -997,10 +1169,18 @@ namespace vm {
 				else if (mode == ZERO_PAGE_Y) {
 					data = _ctx.read(current + 1) + _ctx.registers[2];
 				}
-				int add = DATA_SIZE[mode] + 1;
-				printf("executing %s (%X) data: %d add: %d current: %d\n", cmd.name, cmdIdx, data, add, current);
+				else if (mode == RELATIVE_ADR) {
+					data = _ctx.read(current + 1);
+				}
+				int add = DATA_SIZE[mode] + 1;				
 				int ret = (*cmd.function)(&_ctx, data);
-				current += add;
+				printf("executing %s (%X) data: %d add: %d current: %d ret: %d\n", cmd.name, cmdIdx, data, add, current, ret);
+				if (ret != 0) {
+					current -= ret;
+				}
+				else {
+					current += add;
+				}
 			}
 		}
 
