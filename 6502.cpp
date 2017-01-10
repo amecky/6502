@@ -19,10 +19,11 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	vm_context ctx;
 	vm_clear_context(&ctx);
 	int nc = 0;
-	int num = vm_assemble_file(&ctx, "prog\\branching.txt");
-	vm_save(&ctx, "bin\\branching.prg");
-	vm_run(&ctx,0x600, num);
-	vm_dump(&ctx,0x200, 8);
+	vm_assemble(&ctx, "BVS #$20");
+	//int num = vm_assemble_file(&ctx, "prog\\branching.txt");
+	//vm_save(&ctx, "bin\\branching.prg");
+	//vm_run(&ctx,0x600, num);
+	//vm_dump(&ctx,0x200, 8);
 	//int size = machine.parse("LDA #$C0\nSTA $0200\nTAX\nSTX $0201\n",&nc);	
 	//printf("size: %d commands: %d\n", size, nc);
 	/*

@@ -117,7 +117,7 @@ int vm_assemble_file(vm_context* ctx, const char* fileName);
 
 void vm_disassemble(vm_context* ctx);
 
-int vm_assemble(vm_context* ctx, const char* text, int* numCommands);
+int vm_assemble(vm_context* ctx, const char* text);
 
 void vm_dump(vm_context* ctx, int pc, int num);
 
@@ -148,11 +148,34 @@ typedef struct vm_command {
 } vm_command;
 
 // -----------------------------------------------------
+// set zero flag
+// -----------------------------------------------------
+PRIVATE void vm_set_zero_flag(vm_context* ctx, int data) {
+	if (data == 0) {
+		ctx->setFlag(vm_flags::Z);
+	}
+	else {
+		ctx->clearFlag(vm_flags::Z);
+	}
+}
+
+// -----------------------------------------------------
+// set negative flag
+// -----------------------------------------------------
+PRIVATE void vm_set_negative_flag(vm_context* ctx, int data) {
+	if (data > 127) {
+		ctx->setFlag(vm_flags::N);
+	}
+	else {
+		ctx->clearFlag(vm_flags::N);
+	}
+}
+// -----------------------------------------------------
 // Command function definitions
 // -----------------------------------------------------
 PRIVATE int vm_op_nop(vm_context* ctx, int pc) {
-	printf("calling NOP\n");
-	return pc + 1;
+	printf("=> NOP\n");
+	return 0;
 }
 
 // ------------------------------------------
@@ -161,37 +184,56 @@ PRIVATE int vm_op_nop(vm_context* ctx, int pc) {
 PRIVATE int vm_op_lda(vm_context* ctx, int data) {
 	printf("=> LDA - data: %d\n", data);
 	ctx->registers[0] = data;
-	if (data == 0) {
-		ctx->setFlag(vm_flags::Z);
-	}
-	if (data > 127) {
-		ctx->setFlag(vm_flags::N);
-	}
+	vm_set_zero_flag(ctx, data);
+	vm_set_negative_flag(ctx, data);
 	return 0;
 }
 
 // ------------------------------------------
 // LDX
 // ------------------------------------------
-PRIVATE int ldx(vm_context* ctx, int data) {
+PRIVATE int vm_op_ldx(vm_context* ctx, int data) {
 	printf("=> LDX - data: %d\n", data);
 	ctx->registers[1] = data;
+	vm_set_zero_flag(ctx, data);
+	vm_set_negative_flag(ctx, data);
+	return 0;
+}
+
+// ------------------------------------------
+// LDY
+// ------------------------------------------
+PRIVATE int vm_op_ldy(vm_context* ctx, int data) {
+	printf("=> LDY - data: %d\n", data);
+	ctx->registers[2] = data;
+	vm_set_zero_flag(ctx, data);
+	vm_set_negative_flag(ctx, data);
 	return 0;
 }
 
 // ------------------------------------------
 // STX
 // ------------------------------------------
-PRIVATE int stx(vm_context* ctx, int data) {
+PRIVATE int vm_op_stx(vm_context* ctx, int data) {
 	printf("=> STX - data: %d\n", data);
 	ctx->write(data, ctx->registers[1]);
 	return 0;
 }
 
 // ------------------------------------------
+// STY
+// ------------------------------------------
+PRIVATE int vm_op_sty(vm_context* ctx, int data) {
+	printf("=> STY - data: %d\n", data);
+	ctx->write(data, ctx->registers[1]);
+	return 0;
+}
+
+
+// ------------------------------------------
 // STA
 // ------------------------------------------
-PRIVATE int sta(vm_context* ctx, int data) {
+PRIVATE int vm_op_sta(vm_context* ctx, int data) {
 	printf("=> STA data: %d\n", data);
 	ctx->write(data, ctx->registers[0]);
 	return 0;
@@ -200,18 +242,78 @@ PRIVATE int sta(vm_context* ctx, int data) {
 // ------------------------------------------
 // TAX
 // ------------------------------------------
-PRIVATE int tax(vm_context* ctx, int data) {
+PRIVATE int vm_op_tax(vm_context* ctx, int data) {
 	printf("=> TAX data: %d\n", data);
 	ctx->registers[1] = ctx->registers[0];
+	vm_set_zero_flag(ctx, ctx->registers[1]);
+	vm_set_negative_flag(ctx, ctx->registers[1]);
+	return 0;
+}
+
+// ------------------------------------------
+// TAY
+// ------------------------------------------
+PRIVATE int vm_op_tay(vm_context* ctx, int data) {
+	printf("=> TAY data: %d\n", data);
+	ctx->registers[2] = ctx->registers[0];
+	vm_set_zero_flag(ctx, ctx->registers[2]);
+	vm_set_negative_flag(ctx, ctx->registers[2]);
+	return 0;
+}
+
+// ------------------------------------------
+// TYA
+// ------------------------------------------
+PRIVATE int vm_op_tya(vm_context* ctx, int data) {
+	printf("=> TYA data: %d\n", data);
+	ctx->registers[0] = ctx->registers[2];
+	vm_set_zero_flag(ctx, ctx->registers[0]);
+	vm_set_negative_flag(ctx, ctx->registers[0]);
+	return 0;
+}
+
+// ------------------------------------------
+// TXA
+// ------------------------------------------
+PRIVATE int vm_op_txa(vm_context* ctx, int data) {
+	printf("=> TXA data: %d\n", data);
+	ctx->registers[0] = ctx->registers[1];
+	vm_set_zero_flag(ctx, ctx->registers[0]);
+	vm_set_negative_flag(ctx, ctx->registers[0]);
 	return 0;
 }
 
 // ------------------------------------------
 // INX
 // ------------------------------------------
-PRIVATE int inx(vm_context* ctx, int data) {
+PRIVATE int vm_op_inx(vm_context* ctx, int data) {
 	printf("=> INX data: %d\n", data);
 	ctx->registers[1] += 1;
+	vm_set_zero_flag(ctx, ctx->registers[1]);
+	vm_set_negative_flag(ctx, ctx->registers[1]);
+	return 0;
+}
+
+// ------------------------------------------
+// INY
+// ------------------------------------------
+PRIVATE int vm_op_iny(vm_context* ctx, int data) {
+	printf("=> INY data: %d\n", data);
+	ctx->registers[2] += 1;
+	vm_set_zero_flag(ctx, ctx->registers[2]);
+	vm_set_negative_flag(ctx, ctx->registers[2]);
+	return 0;
+}
+
+// ------------------------------------------
+// INC
+// ------------------------------------------
+PRIVATE int vm_op_inc(vm_context* ctx, int data) {
+	printf("=> INC data: %d\n", data);
+	int v = ctx->read(data) + 1;
+	ctx->write(data, v);
+	vm_set_zero_flag(ctx, v);
+	vm_set_negative_flag(ctx, v);
 	return 0;
 }
 
@@ -230,30 +332,7 @@ PRIVATE int adc(vm_context* ctx, int data) {
 	return 0;
 }
 
-PRIVATE int decrement(vm_context* ctx, int pc, int idx) {
-	--ctx->registers[idx];
-	if (ctx->registers[idx] < 0) {
-		ctx->registers[idx] = 255;
-	}
-	if (ctx->registers[idx] == 0) {
-		ctx->setFlag(vm_flags::Z);
-	}
-	if ((ctx->registers[idx] & 128) == 128) {
-		ctx->setFlag(vm_flags::N);
-	}
-	else {
-		ctx->clearFlag(vm_flags::N);
-	}
-	return 0;
-}
 
-// ------------------------------------------
-// DEX
-// ------------------------------------------
-PRIVATE int dex(vm_context* ctx, int data) {
-	printf("=> DEX\n");
-	return decrement(ctx, data, 1);
-}
 
 // ------------------------------------------
 // CPX
@@ -277,19 +356,40 @@ PRIVATE int cpx(vm_context* ctx, int data) {
 }
 
 // ------------------------------------------
+// decrement
+// ------------------------------------------
+PRIVATE int vm_decrement(vm_context* ctx, int pc, int idx) {
+	--ctx->registers[idx];
+	if (ctx->registers[idx] < 0) {
+		ctx->registers[idx] = 255;
+	}
+	vm_set_zero_flag(ctx, ctx->registers[idx]);
+	vm_set_negative_flag(ctx, ctx->registers[idx]);
+	return 0;
+}
+
+// ------------------------------------------
+// DEX
+// ------------------------------------------
+PRIVATE int vm_op_dex(vm_context* ctx, int data) {
+	printf("=> DEX\n");
+	return vm_decrement(ctx, data, 1);
+}
+
+// ------------------------------------------
 // DEY
 // ------------------------------------------
-PRIVATE int dey(vm_context* ctx, int pc) {
+PRIVATE int vm_op_dey(vm_context* ctx, int pc) {
 	printf("=> DEY\n");
-	return decrement(ctx, pc, 2);
+	return vm_decrement(ctx, pc, 2);
 }
 
 // ------------------------------------------
 // DEC
 // ------------------------------------------
-PRIVATE int dec(vm_context* ctx, int pc) {
+PRIVATE int vm_op_dec(vm_context* ctx, int pc) {
 	printf("=> DEC\n");
-	return decrement(ctx, pc, 0);
+	return vm_decrement(ctx, pc, 0);
 }
 
 PRIVATE int brk(vm_context* ctx, int pc) {
@@ -319,7 +419,99 @@ PRIVATE int vm_op_beq(vm_context* ctx, int data) {
 	return 0;
 }
 
+// ------------------------------------------
+// BPL
+// ------------------------------------------
+PRIVATE int vm_op_bpl(vm_context* ctx, int data) {
+	printf("=> BPL - data: %d\n", data);
+	if (!ctx->isSet(vm_flags::N)) {
+		return data;
+	}
+	return 0;
+}
 
+// ------------------------------------------
+// BVC
+// ------------------------------------------
+PRIVATE int vm_op_bvc(vm_context* ctx, int data) {
+	printf("=> BVC - data: %d\n", data);
+	if (!ctx->isSet(vm_flags::V)) {
+		return data;
+	}
+	return 0;
+}
+
+// ------------------------------------------
+// BVS
+// ------------------------------------------
+PRIVATE int vm_op_bvs(vm_context* ctx, int data) {
+	printf("=> BVS - data: %d\n", data);
+	if (ctx->isSet(vm_flags::V)) {
+		return data;
+	}
+	return 0;
+}
+
+// ------------------------------------------
+// BCC
+// ------------------------------------------
+PRIVATE int vm_op_bcc(vm_context* ctx, int data) {
+	printf("=> BCC - data: %d\n", data);
+	if (!ctx->isSet(vm_flags::C)) {
+		return data;
+	}
+	return 0;
+}
+
+// ------------------------------------------
+// BCS
+// ------------------------------------------
+PRIVATE int vm_op_bcs(vm_context* ctx, int data) {
+	printf("=> BCS - data: %d\n", data);
+	if (ctx->isSet(vm_flags::C)) {
+		return data;
+	}
+	return 0;
+}
+
+// ------------------------------------------
+// CLC
+// ------------------------------------------
+PRIVATE int vm_op_clc(vm_context* ctx, int data) {
+	printf("=> CLC - data: %d\n", data);
+	ctx->clearFlag(vm_flags::C);
+	return 0;
+}
+
+// ------------------------------------------
+// CLD
+// ------------------------------------------
+PRIVATE int vm_op_cld(vm_context* ctx, int data) {
+	printf("=> CLD - data: %d\n", data);
+	ctx->clearFlag(vm_flags::D);
+	return 0;
+}
+
+// ------------------------------------------
+// CLI
+// ------------------------------------------
+PRIVATE int vm_op_cli(vm_context* ctx, int data) {
+	printf("=> CLI - data: %d\n", data);
+	ctx->clearFlag(vm_flags::I);
+	return 0;
+}
+
+// ------------------------------------------
+// CLV
+// ------------------------------------------
+PRIVATE int vm_op_clv(vm_context* ctx, int data) {
+	printf("=> CLV - data: %d\n", data);
+	ctx->clearFlag(vm_flags::V);
+	return 0;
+}
+
+
+// ADC AND ASL BIT BMI CMP CPY JMP JSR LST ORA PHA PHP PLA PLP ROL ROR RTI RTS SBC SEC SED SEI TSX TXS
 // -----------------------------------------------------
 // Array of all supported commands with function pointer
 // and a bitset of supported addressing modes
@@ -328,35 +520,35 @@ const static vm_command VM_COMMANDS[] = {
 	{ "ADC", &adc, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
 	{ "AND", &vm_op_nop, 0 },
 	{ "ASL", &vm_op_nop, 0 },
-	{ "BCC", &vm_op_nop, 0 },
-	{ "BCS", &vm_op_nop, 0 },
+	{ "BCC", &vm_op_bcc, 1 << RELATIVE_ADR },
+	{ "BCS", &vm_op_bcs, 1 << RELATIVE_ADR },
 	{ "BEQ", &vm_op_beq, 1 << RELATIVE_ADR },
 	{ "BIT", &vm_op_nop, 0 },
 	{ "BMI", &vm_op_nop, 0 },
 	{ "BNE", &vm_op_bne, 1 << RELATIVE_ADR },
-	{ "BPL", &vm_op_nop, 0 },
+	{ "BPL", &vm_op_bpl, 1 << RELATIVE_ADR },
 	{ "BRK", &brk, 0 },
-	{ "BVC", &vm_op_nop, 0 },
-	{ "BVS", &vm_op_nop, 0 },
-	{ "CLC", &vm_op_nop, 0 },
-	{ "CLD", &vm_op_nop, 0 },
-	{ "CLI", &vm_op_nop, 0 },
-	{ "CLV", &vm_op_nop, 0 },
+	{ "BVC", &vm_op_bvc, 1 << RELATIVE_ADR },
+	{ "BVS", &vm_op_bvs, 1 << RELATIVE_ADR },
+	{ "CLC", &vm_op_clc, 0 },
+	{ "CLD", &vm_op_cld, 0 },
+	{ "CLI", &vm_op_cli, 0 },
+	{ "CLV", &vm_op_clv, 0 },
 	{ "CMP", &vm_op_nop, 0 },
 	{ "CPX", &cpx, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ABSOLUTE_ADR },
 	{ "CPY", &vm_op_nop, 0 },
-	{ "DEC", &dec, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
-	{ "DEX", &dex, 0 },
-	{ "DEY", &dey, 0 },
+	{ "DEC", &vm_op_dec, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
+	{ "DEX", &vm_op_dex, 0 },
+	{ "DEY", &vm_op_dey, 0 },
 	{ "EOR", &vm_op_nop, 0 },
-	{ "INC", &vm_op_nop, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
-	{ "INX", &inx, 0 },
-	{ "INY", &vm_op_nop, 0 },
+	{ "INC", &vm_op_inc, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
+	{ "INX", &vm_op_inx, 0 },
+	{ "INY", &vm_op_iny, 0 },
 	{ "JMP", &vm_op_nop, 0 },
 	{ "JSR", &vm_op_nop, 0 },
 	{ "LDA", &vm_op_lda, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
-	{ "LDX", &ldx, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_Y | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_Y },
-	{ "LDY", &vm_op_nop, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
+	{ "LDX", &vm_op_ldx, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_Y | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_Y },
+	{ "LDY", &vm_op_ldy, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
 	{ "LSR", &vm_op_nop, 0 },
 	{ "NOP", &vm_op_nop, 0 },
 	{ "ORA", &vm_op_nop, 0 },
@@ -372,16 +564,23 @@ const static vm_command VM_COMMANDS[] = {
 	{ "SEC", &vm_op_nop, 0 },
 	{ "SED", &vm_op_nop, 0 },
 	{ "SEI", &vm_op_nop, 0 },
-	{ "STA", &sta, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
-	{ "STX", &stx, 1 << ZERO_PAGE | 1 << ZERO_PAGE_Y | 1 << ABSOLUTE_ADR },
-	{ "STY", &vm_op_nop, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR },
-	{ "TAX", &tax, 0 },
-	{ "TAY", &vm_op_nop, 0 },
+	{ "STA", &vm_op_sta, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
+	{ "STX", &vm_op_stx, 1 << ZERO_PAGE | 1 << ZERO_PAGE_Y | 1 << ABSOLUTE_ADR },
+	{ "STY", &vm_op_sty, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR },
+	{ "TAX", &vm_op_tax, 0 },
+	{ "TAY", &vm_op_tay, 0 },
 	{ "TSX", &vm_op_nop, 0 },
-	{ "TXA", &vm_op_nop, 0 },
+	{ "TXA", &vm_op_txa, 0 },
 	{ "TXS", &vm_op_nop, 0 },
-	{ "TYA", &vm_op_nop, 0 }
+	{ "TYA", &vm_op_tya, 0 }
 };
+
+typedef enum vm_opcode {
+	ADC, AND, ASL, BCC, BCS, BEQ, BIT, BMI, BNE, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV,
+	CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, LDY, LSR, NOP,
+	ORA, PHA, PHP, PLA, PLP, ROL, ROR, RTI, RTS, SBC, SEC, SED, SEI, STA, STX, STY, TAX,
+	TAY, TSX, TXA, TXS, TYA, EOL
+} vm_opcode;
 
 const static int NUM_COMMANDS = 56;
 
@@ -400,20 +599,8 @@ PRIVATE int find_command(const char* text) {
 // The number of bytes of data for every addressing
 // mode
 // -----------------------------------------------------
-/*
-NONE,
-IMMEDIDATE,
-ABSOLUTE_ADR,
-ABSOLUTE_X,
-ABSOLUTE_Y,
-ZERO_PAGE,
-ZERO_PAGE_X,
-ZERO_PAGE_Y,
-INDIRECT_X,
-INDIRECT_Y,
-RELATIVE_ADR
-*/
-const static int DATA_SIZE[] = {
+// NONE,IMMEDIDATE,ABSOLUTE_ADR,ABSOLUTE_X,ABSOLUTE_Y,ZERO_PAGE,ZERO_PAGE_X,ZERO_PAGE_Y,INDIRECT_X,INDIRECT_Y,RELATIVE_ADR
+const static int VM_DATA_SIZE[] = {
 	0, 1, 2, 2, 2, 1, 1, 1, 2, 2, 1
 };
 
@@ -423,107 +610,91 @@ const static int DATA_SIZE[] = {
 // Command mapping
 // -----------------------------------------------------
 typedef struct vm_command_mapping {
-	int cmd;
+	vm_opcode op_code;
 	vm_addressing_mode mode;
 	uint8_t hex;
 } vm_command_mapping;
 
-const static vm_command_mapping NO_OP = vm_command_mapping{ 100, NONE, 0xEA };
+const static vm_command_mapping NO_OP = vm_command_mapping{ EOL, NONE, 0xFF };
 
 // -----------------------------------------------------
 // Array of all comand mappings
 // -----------------------------------------------------
-const static vm_command_mapping COMMAND_MAPPING[] = {
+const static vm_command_mapping VM_COMMAND_MAPPING[] = {
 	// ADC
-	{ 0, IMMEDIDATE,   0x69 },
-	{ 0, ZERO_PAGE,    0x65 },
-	{ 0, ZERO_PAGE_X,  0x75 },
-	{ 0, ABSOLUTE_ADR, 0x6D },
-	{ 0, ABSOLUTE_X,   0x7D },
-	{ 0, ABSOLUTE_Y,   0x79 },
-	{ 0, INDIRECT_X,   0x61 },
-	{ 0, INDIRECT_Y,   0x71 },
-	// BNE
-	{ 8, RELATIVE_ADR, 0xD0 },
-	// BRK
-	{ 10, NONE,        0x00 },
-	// CPX
-	{ 18, IMMEDIDATE,  0xE0 },
-	{ 18, ZERO_PAGE,   0xE4 },
-	{ 18, ABSOLUTE_ADR,0xEC },
-	// DEC
-	{ 20, ZERO_PAGE,   0xC6 },
-	{ 20, ZERO_PAGE_X, 0xD6 },
-	{ 20, ABSOLUTE_ADR,0xCE },
-	{ 20, ABSOLUTE_X,  0xDE },
-	// DEX
-	{ 21, NONE,        0xCA },
-	// DEY
-	{ 22, NONE,        0x88 },
-	// INC
-	{ 24, ZERO_PAGE,   0xE6 },
-	{ 24, ZERO_PAGE_X, 0xF6 },
-	{ 24, ABSOLUTE_ADR,0xEE },
-	{ 24, ABSOLUTE_X,  0xFE },
-	// INX
-	{ 25, NONE,        0xE8 },
-	// INY
-	{ 26, NONE,        0xC8 },
-	// LDA
-	{ 29, IMMEDIDATE,  0xA9 },
-	{ 29, ZERO_PAGE,   0xA5 },
-	{ 29, ZERO_PAGE_X, 0xB5 },
-	{ 29, ABSOLUTE_ADR,0xAD },
-	{ 29, ABSOLUTE_X,  0xBD },
-	{ 29, ABSOLUTE_Y,  0xB9 },
-	{ 29, INDIRECT_X,  0xA1 },
-	{ 29, INDIRECT_Y,  0xB1 },
-	// LDX
-	{ 30, IMMEDIDATE,  0xA2 },
-	{ 30, ZERO_PAGE,   0xA6 },
-	{ 30, ZERO_PAGE_Y, 0xB6 },
-	{ 30, ABSOLUTE_ADR,0xAE },
-	{ 30, ABSOLUTE_Y,  0xBE },
-	// LDY
-	{ 31, IMMEDIDATE,  0xA0 },
-	{ 31, ZERO_PAGE,   0xA4 },
-	{ 31, ZERO_PAGE_X, 0xB4 },
-	{ 31, ABSOLUTE_ADR,0xAC },
-	{ 31, ABSOLUTE_X,  0xBC },
-	// PHA
-	{ 35, NONE,        0x48 },
-	// PLA
-	{ 37, NONE,        0x68 },
-	// STA
-	{ 47, ZERO_PAGE,   0x85 },
-	{ 47, ZERO_PAGE_X, 0x95 },
-	{ 47, ABSOLUTE_ADR,0x8D },
-	{ 47, ABSOLUTE_X,  0x9D },
-	{ 47, ABSOLUTE_Y,  0x99 },
-	{ 47, INDIRECT_X,  0x81 },
-	{ 47, INDIRECT_Y,  0x91 },
-	// STX
-	{ 48, ZERO_PAGE,   0x86 },
-	{ 48, ZERO_PAGE_Y, 0x96 },
-	{ 48, ABSOLUTE_ADR,0x8E },
-	// STY
-	{ 49, ZERO_PAGE,   0x84 },
-	{ 49, ZERO_PAGE_X, 0x94 },
-	{ 49, ABSOLUTE_ADR,0x8C },
-	// TAX
-	{ 50, NONE,        0xAA },
-	// TAY
-	{ 51, NONE,        0xA8 },
-	// TSX
-	{ 52, NONE,        0xBA },
-	// TXA
-	{ 53, NONE,        0x8A },
-	// TXS
-	{ 54, NONE,        0x9A },
-	// TYA
-	{ 55, NONE,        0x98 },
-	// END
-	{ 100, NONE,        0xFF },
+	{ ADC, IMMEDIDATE,   0x69 },
+	{ ADC, ZERO_PAGE,    0x65 },
+	{ ADC, ZERO_PAGE_X,  0x75 },
+	{ ADC, ABSOLUTE_ADR, 0x6D },
+	{ ADC, ABSOLUTE_X,   0x7D },
+	{ ADC, ABSOLUTE_Y,   0x79 },
+	{ ADC, INDIRECT_X,   0x61 },
+	{ ADC, INDIRECT_Y,   0x71 },
+	{ BNE, RELATIVE_ADR, 0xD0 },
+	{ BNE, RELATIVE_ADR, 0xD0 },
+	{ BPL, RELATIVE_ADR, 0x10 },
+	{ BRK, NONE,         0x00 },
+	{ BVC, RELATIVE_ADR, 0x50 },
+	{ BVS, RELATIVE_ADR, 0x70 },
+	{ CLC, NONE,         0x18 },
+	{ CLD, NONE,         0xD8 },
+	{ CLI, NONE,         0x58 },
+	{ CLV, NONE,         0xB8 },
+	{ CPX, IMMEDIDATE,   0xE0 },
+	{ CPX, ZERO_PAGE,    0xE4 },
+	{ CPX, ABSOLUTE_ADR, 0xEC },
+	{ DEC, ZERO_PAGE,    0xC6 },
+	{ DEC, ZERO_PAGE_X,  0xD6 },
+	{ DEC, ABSOLUTE_ADR, 0xCE },
+	{ DEC, ABSOLUTE_X,   0xDE },
+	{ DEX, NONE,         0xCA },
+	{ DEY, NONE,         0x88 },
+	{ INC, ZERO_PAGE,    0xE6 },
+	{ INC, ZERO_PAGE_X,  0xF6 },
+	{ INC, ABSOLUTE_ADR, 0xEE },
+	{ INC, ABSOLUTE_X,   0xFE },
+	{ INX, NONE,         0xE8 },
+	{ INY, NONE,         0xC8 },
+	{ LDA, IMMEDIDATE,   0xA9 },
+	{ LDA, ZERO_PAGE,    0xA5 },
+	{ LDA, ZERO_PAGE_X,  0xB5 },
+	{ LDA, ABSOLUTE_ADR, 0xAD },
+	{ LDA, ABSOLUTE_X,   0xBD },
+	{ LDA, ABSOLUTE_Y,   0xB9 },
+	{ LDA, INDIRECT_X,   0xA1 },
+	{ LDA, INDIRECT_Y,   0xB1 },
+	{ LDX, IMMEDIDATE,   0xA2 },
+	{ LDX, ZERO_PAGE,    0xA6 },
+	{ LDX, ZERO_PAGE_Y,  0xB6 },
+	{ LDX, ABSOLUTE_ADR, 0xAE },
+	{ LDX, ABSOLUTE_Y,   0xBE },
+	{ LDY, IMMEDIDATE,   0xA0 },
+	{ LDY, ZERO_PAGE,    0xA4 },
+	{ LDY, ZERO_PAGE_X,  0xB4 },
+	{ LDY, ABSOLUTE_ADR, 0xAC },
+	{ LDY, ABSOLUTE_X,   0xBC },
+	{ PHA, NONE,         0x48 },
+	{ PLA, NONE,         0x68 },
+	{ STA, ZERO_PAGE,    0x85 },
+	{ STA, ZERO_PAGE_X,  0x95 },
+	{ STA, ABSOLUTE_ADR, 0x8D },
+	{ STA, ABSOLUTE_X,   0x9D },
+	{ STA, ABSOLUTE_Y,   0x99 },
+	{ STA, INDIRECT_X,   0x81 },
+	{ STA, INDIRECT_Y,   0x91 },
+	{ STX, ZERO_PAGE,    0x86 },
+	{ STX, ZERO_PAGE_Y,  0x96 },
+	{ STX, ABSOLUTE_ADR, 0x8E },
+	{ STY, ZERO_PAGE,    0x84 },
+	{ STY, ZERO_PAGE_X,  0x94 },
+	{ STY, ABSOLUTE_ADR, 0x8C },
+	{ TAX, NONE,         0xAA },
+	{ TAY, NONE,         0xA8 },
+	{ TSX, NONE,         0xBA },
+	{ TXA, NONE,         0x8A },
+	{ TXS, NONE,         0x9A },
+	{ TYA, NONE,         0x98 },
+	{ EOL, NONE,         0xFF },
 };
 
 const uint32_t FNV_Prime = 0x01000193; //   16777619
@@ -539,19 +710,19 @@ PRIVATE uint32_t fnv1a(const char* text, int len, uint32_t hash = FNV_Seed) {
 // -----------------------------------------------------
 // Token
 // -----------------------------------------------------
-struct Token {
+typedef struct vm_token {
 
 	enum TokenType { EMPTY, NUMBER, STRING, DOLLAR, HASHTAG, OPEN_BRACKET, CLOSE_BRACKET, COMMA, X, Y, SEPARATOR, COMMAND };
 
-	Token(TokenType t) : type(t), value(0), hash(0) {}
-	Token(TokenType t, int v) : type(t), value(v), hash(0) {}
+	vm_token(TokenType t) : type(t), value(0), hash(0) {}
+	vm_token(TokenType t, int v) : type(t), value(v), hash(0) {}
 	//Token(TokenType t, uint32_t st, int s) : type(t), value(0), hash(st), size(s) {}
 
 	TokenType type;
 	int value;
 	uint32_t hash;
 	int line;
-};
+} vm_token;
 
 	
 
@@ -673,15 +844,15 @@ public:
 		const char* p = _text;
 		int line = 1;
 		while (*p != 0) {
-			Token token(Token::EMPTY);
+			vm_token token(vm_token::EMPTY);
 			if (isText(p)) {
 				const char *identifier = p;
 				while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z'))
 					p++;
-				token = Token(Token::STRING);
+				token = vm_token(vm_token::STRING);
 				int cmdIdx = find_command(identifier);
 				if (cmdIdx != -1) {
-					token = Token(Token::COMMAND, cmdIdx);
+					token = vm_token(vm_token::COMMAND, cmdIdx);
 				}
 				else {
 					token.hash = fnv1a(identifier, p - identifier);
@@ -691,31 +862,30 @@ public:
 				const char* before = p - 1;
 				if (*before == '$') {
 					char *out;
-					token = Token(Token::NUMBER, hex2int(p, &out));
+					token = vm_token(vm_token::NUMBER, hex2int(p, &out));
 					p = out;
 				}
 			}
 			else if (isDigit(p)) {
 				char *out;
-				token = Token(Token::NUMBER, str2f(p, &out));
+				token = vm_token(vm_token::NUMBER, str2f(p, &out));
 				p = out;
 			}
 			else {
 				switch (*p) {
-				case '(': token = Token(Token::OPEN_BRACKET); break;
-				case ')': token = Token(Token::CLOSE_BRACKET); break;
+				case '(': token = vm_token(vm_token::OPEN_BRACKET); break;
+				case ')': token = vm_token(vm_token::CLOSE_BRACKET); break;
 				case ' ': case '\t': case '\r': break;
 				case '\n': ++line; break;
-				case ':': token = Token(Token::SEPARATOR); break;
-				case 'X': token = Token(Token::X); break;
-				case 'Y': token = Token(Token::Y); break;
-				case '#': token = Token(Token::HASHTAG); break;
-					//case '$': token = Token(Token::DOLLAR); break;
-				case ',': token = Token(Token::COMMA); break;
+				case ':': token = vm_token(vm_token::SEPARATOR); break;
+				case 'X': token = vm_token(vm_token::X); break;
+				case 'Y': token = vm_token(vm_token::Y); break;
+				case '#': token = vm_token(vm_token::HASHTAG); break;
+				case ',': token = vm_token(vm_token::COMMA); break;
 				}
 				++p;
 			}
-			if (token.type != Token::EMPTY) {
+			if (token.type != vm_token::EMPTY) {
 				token.line = line;
 				_tokens.push_back(token);
 			}
@@ -727,7 +897,7 @@ public:
 		return _tokens.size();
 	}
 
-	const Token& get(size_t index) const {
+	const vm_token& get(size_t index) const {
 		return _tokens[index];
 	}
 
@@ -746,25 +916,25 @@ private:
 		return false;
 	}
 
-	std::vector<Token> _tokens;
+	std::vector<vm_token> _tokens;
 	const char* _text;
 	bool _created;
 };
 
-PRIVATE const char* translate_token_tpye(const Token& t) {
+PRIVATE const char* translate_token_tpye(const vm_token& t) {
 	switch (t.type) {
-		case Token::EMPTY: return "EMPTY"; break;
-		case Token::NUMBER: return "NUMBER"; break;
-		case Token::STRING: return "STRING"; break;
-		case Token::DOLLAR: return "DOLLAR"; break;
-		case Token::HASHTAG: return "HASHTAG"; break;
-		case Token::OPEN_BRACKET: return "OPEN_BRACKET"; break;
-		case Token::CLOSE_BRACKET: return "CLOSE_BRACKET"; break;
-		case Token::COMMA: return "COMMA"; break;
-		case Token::SEPARATOR: return "SEPARATOR"; break;
-		case Token::X: return "X"; break;
-		case Token::Y: return "Y"; break;
-		case Token::COMMAND: return "COMMAND"; break;
+		case vm_token::EMPTY: return "EMPTY"; break;
+		case vm_token::NUMBER: return "NUMBER"; break;
+		case vm_token::STRING: return "STRING"; break;
+		case vm_token::DOLLAR: return "DOLLAR"; break;
+		case vm_token::HASHTAG: return "HASHTAG"; break;
+		case vm_token::OPEN_BRACKET: return "OPEN_BRACKET"; break;
+		case vm_token::CLOSE_BRACKET: return "CLOSE_BRACKET"; break;
+		case vm_token::COMMA: return "COMMA"; break;
+		case vm_token::SEPARATOR: return "SEPARATOR"; break;
+		case vm_token::X: return "X"; break;
+		case vm_token::Y: return "Y"; break;
+		case vm_token::COMMAND: return "COMMAND"; break;
 		default: return "UNKNOWN";
 	}
 	return nullptr;
@@ -773,15 +943,15 @@ PRIVATE const char* translate_token_tpye(const Token& t) {
 // -----------------------------------------------------------------
 // get hex value from command token
 // -----------------------------------------------------------------
-PRIVATE uint8_t get_hex_value(const Token& token, vm_addressing_mode mode) {
+PRIVATE uint8_t get_hex_value(const vm_token& token, vm_addressing_mode mode) {
 	int i = 0;
-	vm_command_mapping m = COMMAND_MAPPING[i];
-	while (m.cmd != 100) {
-		if (m.cmd == token.value && m.mode == mode) {
+	vm_command_mapping m = VM_COMMAND_MAPPING[i];
+	while (m.op_code != EOL) {
+		if (m.op_code == token.value && m.mode == mode) {
 			return m.hex;
 		}
 		++i;
-		m = COMMAND_MAPPING[i];
+		m = VM_COMMAND_MAPPING[i];
 	}
 	printf("Error: Cannot find HEX value for %d at line %d\n", token.value, token.line);
 	return 0xEA;
@@ -792,13 +962,13 @@ PRIVATE uint8_t get_hex_value(const Token& token, vm_addressing_mode mode) {
 // -----------------------------------------------------------------
 PRIVATE vm_command_mapping get_command_mapping(uint8_t hex) {
 	int i = 0;
-	vm_command_mapping m = COMMAND_MAPPING[i];
-	while (m.cmd != 100) {
+	vm_command_mapping m = VM_COMMAND_MAPPING[i];
+	while (m.op_code != EOL) {
 		if (m.hex == hex) {
 			return m;
 		}
 		++i;
-		m = COMMAND_MAPPING[i];
+		m = VM_COMMAND_MAPPING[i];
 	}
 	return NO_OP;
 }
@@ -835,19 +1005,19 @@ PRIVATE const char* translate_addressing_mode(vm_addressing_mode mode) {
 // get addressing mode 
 // -----------------------------------------------------------------
 PRIVATE vm_addressing_mode get_addressing_mode(const Tokenizer & tokenizer, int pos) {
-	const Token& command = tokenizer.get(pos);
-	if (command.type == Token::COMMAND) {
-		const Token& next = tokenizer.get(pos + 1);
-		if (next.type == Token::HASHTAG) {
+	const vm_token& command = tokenizer.get(pos);
+	if (command.type == vm_token::COMMAND) {
+		const vm_token& next = tokenizer.get(pos + 1);
+		if (next.type == vm_token::HASHTAG) {
 			return vm_addressing_mode::IMMEDIDATE;
 		}
-		else if (next.type == Token::NUMBER) {
+		else if (next.type == vm_token::NUMBER) {
 			int v = next.value;
 			if (pos + 2 < tokenizer.num()) {
-				const Token& nn = tokenizer.get(pos + 2);
-				if (nn.type == Token::COMMA) {
-					const Token& nn = tokenizer.get(pos + 3);
-					if (nn.type == Token::X) {
+				const vm_token& nn = tokenizer.get(pos + 2);
+				if (nn.type == vm_token::COMMA) {
+					const vm_token& nn = tokenizer.get(pos + 3);
+					if (nn.type == vm_token::X) {
 						if (v <= 255) {
 							return vm_addressing_mode::ZERO_PAGE_X;
 						}
@@ -866,10 +1036,10 @@ PRIVATE vm_addressing_mode get_addressing_mode(const Tokenizer & tokenizer, int 
 			}
 			return vm_addressing_mode::ABSOLUTE_ADR;
 		}
-		else if (next.type == Token::OPEN_BRACKET) {
+		else if (next.type == vm_token::OPEN_BRACKET) {
 
 		}
-		else if (next.type == Token::STRING) {
+		else if (next.type == vm_token::STRING) {
 			return vm_addressing_mode::RELATIVE_ADR;
 		}
 	}
@@ -885,7 +1055,7 @@ void vm_disassemble(vm_context* ctx) {
 	while (pc < end) {
 		uint8_t hex = ctx->read(pc);
 		const vm_command_mapping& mapping = get_command_mapping(hex);
-		const vm_command& cmd = VM_COMMANDS[mapping.cmd];
+		const vm_command& cmd = VM_COMMANDS[mapping.op_code];
 		printf("%04X ",pc);
 		printf("%s ", cmd.name);
 		switch (mapping.mode) {
@@ -901,28 +1071,30 @@ void vm_disassemble(vm_context* ctx) {
 			case RELATIVE_ADR: printf("$%02X", ctx->read(pc + 1)); break;
 		}
 		printf("\n");
-		pc += DATA_SIZE[mapping.mode] + 1;
+		pc += VM_DATA_SIZE[mapping.mode] + 1;
 	}
 }
-
 	
-
-struct LabelDefinition {
+// -----------------------------------------------------------------
+// label definition
+// -----------------------------------------------------------------
+typedef struct vm_label_definition {
 	int pc;
 	uint32_t hash;
-};
+} vm_label_definition;
+
 // -----------------------------------------------------------------
 // convert tokens 
 // -----------------------------------------------------------------
 PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, int* numCommands) {
 	printf("tokens: %d\n", tokenizer.num());
 	int pc = 0x600;
-	std::vector<LabelDefinition> definitions;
-	std::vector<LabelDefinition> branches;
+	std::vector<vm_label_definition> definitions;
+	std::vector<vm_label_definition> branches;
 	for (size_t i = 0; i < tokenizer.num(); ++i) {
-		const Token& t = tokenizer.get(i);
+		const vm_token& t = tokenizer.get(i);
 		printf("%d = %s (line: %d)\n", i, translate_token_tpye(t), t.line);
-		if (t.type == Token::COMMAND) {
+		if (t.type == vm_token::COMMAND) {
 			if (numCommands != nullptr) {
 				++*numCommands;
 			}
@@ -935,45 +1107,41 @@ PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, int* numComma
 			printf("=> index: %d  mode: %s cmd: %s (%X)\n", t.value, translate_addressing_mode(mode), cmd.name, hex);
 			ctx->write(pc++, hex);
 			if (mode == vm_addressing_mode::IMMEDIDATE) {
-				const Token& next = tokenizer.get(i + 2);
+				const vm_token& next = tokenizer.get(i + 2);
 				ctx->write(pc++, next.value);
 			}
 			else if (mode == vm_addressing_mode::ABSOLUTE_ADR || mode == vm_addressing_mode::ABSOLUTE_X || mode == vm_addressing_mode::ABSOLUTE_Y) {
-				const Token& next = tokenizer.get(i + 1);
+				const vm_token& next = tokenizer.get(i + 1);
 				ctx->write(pc++, low_value(next.value));
 				ctx->write(pc++, high_value(next.value));
 			}
 			else if (mode == vm_addressing_mode::ZERO_PAGE || mode == vm_addressing_mode::ZERO_PAGE_X || mode == vm_addressing_mode::ZERO_PAGE_Y) {
-				const Token& next = tokenizer.get(i + 1);
+				const vm_token& next = tokenizer.get(i + 1);
 				ctx->write(pc++, low_value(next.value));
 			}
 			else if (mode == vm_addressing_mode::RELATIVE_ADR) {
-				const Token& next = tokenizer.get(i + 1);
-				LabelDefinition def;
+				const vm_token& next = tokenizer.get(i + 1);
+				vm_label_definition def;
 				def.hash = next.hash;
 				def.pc = pc;
 				branches.push_back(def);
 				ctx->write(pc++, 0);
 			}
 		}
-		else if (t.type == Token::STRING) {
-			const Token& next = tokenizer.get(i + 1);
-			if (next.type == Token::SEPARATOR) {
-				printf("=> label definition at %X\n", pc);
-				LabelDefinition def;
+		else if (t.type == vm_token::STRING) {
+			const vm_token& next = tokenizer.get(i + 1);
+			if (next.type == vm_token::SEPARATOR) {
+				vm_label_definition def;
 				def.hash = t.hash;
 				def.pc = pc;
 				definitions.push_back(def);
 			}
-			//else {
-				//printf("found string at %X\n", pc);
-			//}
 		}
 	}
 	printf("labels: %d\n", definitions.size());
 	printf("branches: %d\n", branches.size());
 	for (size_t i = 0; i < branches.size();++i) {
-		const LabelDefinition& branch = branches[i];
+		const vm_label_definition& branch = branches[i];
 		printf("branch %d\n", branch.hash);
 		int idx = -1;
 		for (size_t j = 0; j < definitions.size(); ++j) {
@@ -998,12 +1166,25 @@ int vm_assemble_file(vm_context* ctx, const char* fileName) {
 	if (tokenizer.parseFile(fileName)) {
 		ctx->numBytes = assemble(tokenizer, ctx, &ctx->numCommands);
 		//save(buffer);
-		//memoryDump(0x600, _num);
 		vm_memory_dump(ctx, 0x600, ctx->numBytes);
 		return ctx->numBytes;
 	}
 	else {
 		printf("ERROR: cannot laod file: '%s'\n", fileName);
+	}
+	return 0;
+}
+
+// ---------------------------------------------------------
+//  assemble 
+// ---------------------------------------------------------
+int vm_assemble(vm_context* ctx, const char* text) {
+	Tokenizer tokenizer;
+	if (tokenizer.parse(text)) {
+		ctx->numBytes = assemble(tokenizer, ctx, &ctx->numCommands);
+		//save(buffer);
+		vm_memory_dump(ctx, 0x600, ctx->numBytes);
+		return ctx->numBytes;
 	}
 	return 0;
 }
@@ -1059,7 +1240,7 @@ void vm_run(vm_context* ctx, int pc, int num) {
 	while (current < end) {
 		uint8_t cmdIdx = ctx->read(current);
 		const vm_command_mapping& mapping = get_command_mapping(cmdIdx);
-		const vm_command& cmd = VM_COMMANDS[mapping.cmd];
+		const vm_command& cmd = VM_COMMANDS[mapping.op_code];
 		vm_addressing_mode mode = mapping.mode;
 		int data = 0;
 		if (mode == IMMEDIDATE) {
@@ -1089,7 +1270,7 @@ void vm_run(vm_context* ctx, int pc, int num) {
 		else if (mode == RELATIVE_ADR) {
 			data = ctx->read(current + 1);
 		}
-		int add = DATA_SIZE[mode] + 1;
+		int add = VM_DATA_SIZE[mode] + 1;
 		int ret = (*cmd.function)(ctx, data);
 		printf("executing %s (%X) data: %d add: %d current: %d ret: %d\n", cmd.name, cmdIdx, data, add, current, ret);
 		if (ret != 0) {
@@ -1164,7 +1345,7 @@ int vm_step(vm_context* ctx, int pc) {
 	int current = pc;
 	uint8_t cmdIdx = ctx->read(current);
 	const vm_command_mapping& mapping = get_command_mapping(cmdIdx);
-	const vm_command& cmd = VM_COMMANDS[mapping.cmd];
+	const vm_command& cmd = VM_COMMANDS[mapping.op_code];
 	vm_addressing_mode mode = mapping.mode;
 	int data = 0;
 	if (mode == IMMEDIDATE) {
@@ -1191,7 +1372,7 @@ int vm_step(vm_context* ctx, int pc) {
 	else if (mode == ZERO_PAGE_Y) {
 		data = ctx->read(current + 1) + ctx->registers[2];
 	}
-	int add = DATA_SIZE[mode] + 1;
+	int add = VM_DATA_SIZE[mode] + 1;
 	printf("executing %s (%X) data: %d add: %d current: %d\n", cmd.name, cmdIdx, data, add, current);
 	int ret = (*cmd.function)(ctx, data);
 	current += add;
