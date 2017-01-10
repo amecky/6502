@@ -475,6 +475,17 @@ PRIVATE int vm_op_bcs(vm_context* ctx, int data) {
 }
 
 // ------------------------------------------
+// BMI
+// ------------------------------------------
+PRIVATE int vm_op_bmi(vm_context* ctx, int data) {
+	printf("=> BMI - data: %d\n", data);
+	if (ctx->isSet(vm_flags::N)) {
+		return data;
+	}
+	return 0;
+}
+
+// ------------------------------------------
 // CLC
 // ------------------------------------------
 PRIVATE int vm_op_clc(vm_context* ctx, int data) {
@@ -510,8 +521,90 @@ PRIVATE int vm_op_clv(vm_context* ctx, int data) {
 	return 0;
 }
 
+// ------------------------------------------
+// PHA
+// ------------------------------------------
+PRIVATE int vm_op_pha(vm_context* ctx, int data) {
+	printf("=> PHA - data: %d\n", data);
+	ctx->push(ctx->registers[0]);
+	return 0;
+}
 
-// ADC AND ASL BIT BMI CMP CPY JMP JSR LST ORA PHA PHP PLA PLP ROL ROR RTI RTS SBC SEC SED SEI TSX TXS
+// ------------------------------------------
+// PLA
+// ------------------------------------------
+PRIVATE int vm_op_pla(vm_context* ctx, int data) {
+	printf("=> PLA - data: %d\n", data);
+	ctx->registers[0] = ctx->pop();
+	return 0;
+}
+
+// ------------------------------------------
+// SEC
+// ------------------------------------------
+PRIVATE int vm_op_sec(vm_context* ctx, int data) {
+	printf("=> SEC - data: %d\n", data);
+	ctx->setFlag(vm_flags::C);
+	return 0;
+}
+
+// ------------------------------------------
+// SED
+// ------------------------------------------
+PRIVATE int vm_op_sed(vm_context* ctx, int data) {
+	printf("=> SED - data: %d\n", data);
+	ctx->setFlag(vm_flags::D);
+	return 0;
+}
+
+// ------------------------------------------
+// BIT
+// ------------------------------------------
+PRIVATE int vm_op_bit(vm_context* ctx, int data) {
+	printf("=> BIT - data: %d\n", data);
+	uint8_t v = ctx->read(data);
+	uint8_t a = ctx->registers[0];
+	uint8_t r = v & a;
+	vm_set_zero_flag(ctx, r);
+	// V 	Overflow Flag 	Set to bit 6 of the memory value
+	// N 	Negative Flag 	Set to bit 7 of the memory value
+	return 0;
+}
+
+// ------------------------------------------
+// ORA
+// ------------------------------------------
+PRIVATE int vm_op_ora(vm_context* ctx, int data) {
+	printf("=> ORA - data: %d\n", data);
+	uint8_t v = ctx->read(data);
+	uint8_t a = ctx->registers[0];
+	uint8_t r = v | a;
+	vm_set_zero_flag(ctx, r);
+	vm_set_negative_flag(ctx, r);
+	return 0;
+}
+
+// ------------------------------------------
+// EOR
+// ------------------------------------------
+PRIVATE int vm_op_eor(vm_context* ctx, int data) {
+	printf("=> EOR - data: %d\n", data);
+	uint8_t v = ctx->read(data);
+	uint8_t a = ctx->registers[0];
+	uint8_t r = 0;
+	for (int i = 0; i < 8; ++i) {
+		uint8_t x = 1 << i;
+		if (((v & x) == x && (a & x) != x) || ((v & x) != x && (a & x) == x)) {
+			r |= x;
+		}
+	}
+	vm_set_zero_flag(ctx, r);
+	vm_set_negative_flag(ctx, r);
+	return 0;
+}
+
+
+// ADC AND ASL CMP CPY JMP JSR LST PHP PLP ROL ROR RTI RTS SBC SEI TSX TXS
 // -----------------------------------------------------
 // Array of all supported commands with function pointer
 // and a bitset of supported addressing modes
@@ -523,8 +616,8 @@ const static vm_command VM_COMMANDS[] = {
 	{ "BCC", &vm_op_bcc, 1 << RELATIVE_ADR },
 	{ "BCS", &vm_op_bcs, 1 << RELATIVE_ADR },
 	{ "BEQ", &vm_op_beq, 1 << RELATIVE_ADR },
-	{ "BIT", &vm_op_nop, 0 },
-	{ "BMI", &vm_op_nop, 0 },
+	{ "BIT", &vm_op_bit, 1 << ABSOLUTE_ADR | 1 << ZERO_PAGE },
+	{ "BMI", &vm_op_bmi, 1 << RELATIVE_ADR },
 	{ "BNE", &vm_op_bne, 1 << RELATIVE_ADR },
 	{ "BPL", &vm_op_bpl, 1 << RELATIVE_ADR },
 	{ "BRK", &brk, 0 },
@@ -540,7 +633,7 @@ const static vm_command VM_COMMANDS[] = {
 	{ "DEC", &vm_op_dec, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
 	{ "DEX", &vm_op_dex, 0 },
 	{ "DEY", &vm_op_dey, 0 },
-	{ "EOR", &vm_op_nop, 0 },
+	{ "EOR", &vm_op_eor, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
 	{ "INC", &vm_op_inc, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
 	{ "INX", &vm_op_inx, 0 },
 	{ "INY", &vm_op_iny, 0 },
@@ -551,18 +644,18 @@ const static vm_command VM_COMMANDS[] = {
 	{ "LDY", &vm_op_ldy, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
 	{ "LSR", &vm_op_nop, 0 },
 	{ "NOP", &vm_op_nop, 0 },
-	{ "ORA", &vm_op_nop, 0 },
-	{ "PHA", &vm_op_nop, 0 },
+	{ "ORA", &vm_op_ora, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
+	{ "PHA", &vm_op_pha, 0 },
 	{ "PHP", &vm_op_nop, 0 },
-	{ "PLA", &vm_op_nop, 0 },
+	{ "PLA", &vm_op_pla, 0 },
 	{ "PLP", &vm_op_nop, 0 },
 	{ "ROL", &vm_op_nop, 0 },
 	{ "ROR", &vm_op_nop, 0 },
 	{ "RTI", &vm_op_nop, 0 },
 	{ "RTS", &vm_op_nop, 0 },
 	{ "SBC", &vm_op_nop, 0 },
-	{ "SEC", &vm_op_nop, 0 },
-	{ "SED", &vm_op_nop, 0 },
+	{ "SEC", &vm_op_sec, 0 },
+	{ "SED", &vm_op_sed, 0 },
 	{ "SEI", &vm_op_nop, 0 },
 	{ "STA", &vm_op_sta, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
 	{ "STX", &vm_op_stx, 1 << ZERO_PAGE | 1 << ZERO_PAGE_Y | 1 << ABSOLUTE_ADR },
@@ -630,6 +723,9 @@ const static vm_command_mapping VM_COMMAND_MAPPING[] = {
 	{ ADC, ABSOLUTE_Y,   0x79 },
 	{ ADC, INDIRECT_X,   0x61 },
 	{ ADC, INDIRECT_Y,   0x71 },
+	{ BIT, ABSOLUTE_ADR, 0x2C },
+	{ BIT, ZERO_PAGE,    0x24 },
+	{ BMI, RELATIVE_ADR, 0x30 },
 	{ BNE, RELATIVE_ADR, 0xD0 },
 	{ BNE, RELATIVE_ADR, 0xD0 },
 	{ BPL, RELATIVE_ADR, 0x10 },
@@ -649,6 +745,14 @@ const static vm_command_mapping VM_COMMAND_MAPPING[] = {
 	{ DEC, ABSOLUTE_X,   0xDE },
 	{ DEX, NONE,         0xCA },
 	{ DEY, NONE,         0x88 },
+	{ EOR, IMMEDIDATE,   0x49 },
+	{ EOR, ZERO_PAGE,    0x45 },
+	{ EOR, ZERO_PAGE_X,  0x55 },
+	{ EOR, ABSOLUTE_ADR, 0x4D },
+	{ EOR, ABSOLUTE_X,   0x5D },
+	{ EOR, ABSOLUTE_Y,   0x59 },
+	{ EOR, INDIRECT_X,   0x41 },
+	{ EOR, INDIRECT_Y,   0x51 },
 	{ INC, ZERO_PAGE,    0xE6 },
 	{ INC, ZERO_PAGE_X,  0xF6 },
 	{ INC, ABSOLUTE_ADR, 0xEE },
@@ -673,8 +777,18 @@ const static vm_command_mapping VM_COMMAND_MAPPING[] = {
 	{ LDY, ZERO_PAGE_X,  0xB4 },
 	{ LDY, ABSOLUTE_ADR, 0xAC },
 	{ LDY, ABSOLUTE_X,   0xBC },
+	{ ORA, IMMEDIDATE,   0x09 },
+	{ ORA, ZERO_PAGE,    0x05 },
+	{ ORA, ZERO_PAGE_X,  0x15 },
+	{ ORA, ABSOLUTE_ADR, 0x0D },
+	{ ORA, ABSOLUTE_X,   0x1D },
+	{ ORA, ABSOLUTE_Y,   0x19 },
+	{ ORA, INDIRECT_X,   0x01 },
+	{ ORA, INDIRECT_Y,   0x11 },
 	{ PHA, NONE,         0x48 },
 	{ PLA, NONE,         0x68 },
+	{ SEC, NONE,         0x38 },
+	{ SED, NONE,         0xF8 },
 	{ STA, ZERO_PAGE,    0x85 },
 	{ STA, ZERO_PAGE_X,  0x95 },
 	{ STA, ABSOLUTE_ADR, 0x8D },
@@ -1237,10 +1351,12 @@ void vm_memory_dump(vm_context* ctx, int pc, int num) {
 void vm_run(vm_context* ctx, int pc, int num) {
 	int current = pc;
 	int end = pc + num;
-	while (current < end) {
+	bool running = true;
+	while (running) {
 		uint8_t cmdIdx = ctx->read(current);
 		const vm_command_mapping& mapping = get_command_mapping(cmdIdx);
 		const vm_command& cmd = VM_COMMANDS[mapping.op_code];
+		
 		vm_addressing_mode mode = mapping.mode;
 		int data = 0;
 		if (mode == IMMEDIDATE) {
@@ -1278,6 +1394,12 @@ void vm_run(vm_context* ctx, int pc, int num) {
 		}
 		else {
 			current += add;
+		}
+		if (current >= end) {
+			running = false;
+		}
+		if (mapping.op_code == BRK) {
+			running = false;
 		}
 	}
 }
