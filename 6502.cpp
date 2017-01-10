@@ -5,6 +5,7 @@
 #include <tchar.h>
 #include <string.h>
 #include <vector>
+#define VM_IMPLEMENTATION
 #include "6502.h"
 
 // https://skilldrick.github.io/easy6502/
@@ -15,11 +16,13 @@
 // http://www.dwheeler.com/6502/oneelkruns/asm1step.html
 
 int _tmain(int argc, _TCHAR* argv[]) {
-	vm::VirtualMachine machine;
+	vm_context ctx;
+	vm_clear_context(&ctx);
 	int nc = 0;
-	machine.parseFile("prog\\branching.txt");
-	machine.run(0x600);
-	machine.dump(0x200, 8);
+	int num = vm_assemble_file(&ctx, "prog\\branching.txt");
+	vm_save(&ctx, "bin\\branching.prg");
+	vm_run(&ctx,0x600, num);
+	vm_dump(&ctx,0x200, 8);
 	//int size = machine.parse("LDA #$C0\nSTA $0200\nTAX\nSTX $0201\n",&nc);	
 	//printf("size: %d commands: %d\n", size, nc);
 	/*
