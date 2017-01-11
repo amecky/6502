@@ -728,6 +728,47 @@ PRIVATE void vm_op_rol(vm_context* ctx, int data) {
 		ctx->write(data, n);
 	}
 }
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// ROR - Move each of the bits in either A or M one place to the right. Bit 7 is filled with the current 
+//       value of the carry flag whilst the old bit 0 becomes the new carry flag value.
+// ------------------------------------------------------------------------------------------------------------------------------
+PRIVATE void vm_op_ror(vm_context* ctx, int data) {
+	int v = 0;
+	if (data == -1) {
+		v = ctx->registers[0];
+	}
+	else {
+		v = ctx->read(data);
+	}
+	int n = v << 1;
+	if (ctx->isSet(vm_flags::C)) {
+		n |= 128;
+	}
+	else {
+		n &= ~128;
+	}
+	if ((v & 1) == 1) {
+		ctx->setFlag(vm_flags::C);
+	}
+	else {
+		ctx->clearFlag(vm_flags::C);
+	}
+	if (data == -1) {
+		ctx->registers[0] = n;
+	}
+	else {
+		ctx->write(data, n);
+	}
+}
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// SEI - Set the interrupt disable flag to one.
+// ------------------------------------------------------------------------------------------------------------------------------
+PRIVATE void vm_op_sei(vm_context* ctx, int data) {
+	ctx->setFlag(vm_flags::I);
+}
+
 // -----------------------------------------------------
 // Command
 // -----------------------------------------------------
@@ -742,7 +783,7 @@ typedef struct vm_command {
 	}
 } vm_command;
 
-// ADC ASL CMP ROR RTI SBC SEI TSX TXS
+// ADC ASL CMP RTI SBC TSX TXS
 // -----------------------------------------------------
 // Array of all supported commands with function pointer
 // and a bitset of supported addressing modes
@@ -788,13 +829,13 @@ const static vm_command VM_COMMANDS[] = {
 	{ "PLA", false, &vm_op_pla, 0 },
 	{ "PLP", false, &vm_op_plp, 0 },
 	{ "ROL", false, &vm_op_rol, 1 << ACCUMULATOR | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
-	{ "ROR", false, &vm_op_nop, 0 },
+	{ "ROR", false, &vm_op_ror, 1 << ACCUMULATOR | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
 	{ "RTI", false, &vm_op_nop, 0 },
 	{ "RTS", true , &vm_op_rts, 0 },
 	{ "SBC", false, &vm_op_nop, 0 },
 	{ "SEC", false, &vm_op_sec, 0 },
 	{ "SED", false, &vm_op_sed, 0 },
-	{ "SEI", false, &vm_op_nop, 0 },
+	{ "SEI", false, &vm_op_sei, 0 },
 	{ "STA", false, &vm_op_sta, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
 	{ "STX", false, &vm_op_stx, 1 << ZERO_PAGE | 1 << ZERO_PAGE_Y | 1 << ABSOLUTE_ADR },
 	{ "STY", false, &vm_op_sty, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR },
@@ -951,9 +992,15 @@ const static vm_command_mapping VM_COMMAND_MAPPING[] = {
 	{ ROL, ZERO_PAGE_X,  0x36 },
 	{ ROL, ABSOLUTE_ADR, 0x2E },
 	{ ROL, ABSOLUTE_X,   0x3E },
+	{ ROR, ACCUMULATOR,  0x6A },
+	{ ROR, ZERO_PAGE,    0x66 },
+	{ ROR, ZERO_PAGE_X,  0x76 },
+	{ ROR, ABSOLUTE_ADR, 0x6E },
+	{ ROR, ABSOLUTE_X,   0x7E },
 	{ RTS, NONE,         0x60 },
 	{ SEC, NONE,         0x38 },
 	{ SED, NONE,         0xF8 },
+	{ SEI, NONE,         0x78 },
 	{ STA, ZERO_PAGE,    0x85 },
 	{ STA, ZERO_PAGE_X,  0x95 },
 	{ STA, ABSOLUTE_ADR, 0x8D },
