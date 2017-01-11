@@ -6,6 +6,5 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\TextLine.h" />
-    <ClInclude Include="..\ShellCommand.h" />
   </ItemGroup>
 </Project>

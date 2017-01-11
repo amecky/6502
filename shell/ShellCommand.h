@@ -1,5 +1,6 @@
 #pragma once
 #include "TextLine.h"
+#define VM_IMPLEMENTATION
 #include "..\6502.h"
 
 int hex2int(const char *hex) {
@@ -28,6 +29,7 @@ enum CommandType {
 	TOK_STEP,
 	TOK_LOAD,
 	TOK_SAVE,
+	TOK_SET_PC
 };
 
 struct CommandLine {
@@ -42,7 +44,7 @@ struct CommandLine {
 class ShellCommand {
 
 public:
-	ShellCommand(vm::VirtualMachine* vm) : _vm(vm) {}
+	ShellCommand(vm_context* ctx) : _ctx(ctx) {}
 	virtual ~ShellCommand() {}
 	virtual void execute(const TextLine& line) = 0;
 	virtual void write_syntax() = 0;
@@ -50,7 +52,7 @@ public:
 	virtual CommandType get_token_type() const = 0;
 	virtual const char* get_command() const = 0;
 protected:
-	vm::VirtualMachine* _vm;
+	vm_context* _ctx;
 };
 
 // ------------------------------------------------------
@@ -59,11 +61,11 @@ protected:
 class ShellAssemble : public ShellCommand {
 
 public:
-	ShellAssemble(vm::VirtualMachine* vm) : ShellCommand(vm) {}
+	ShellAssemble(vm_context* ctx) : ShellCommand(ctx) {}
 	void execute(const TextLine& line) {
 		char buffer[128];
 		line.get_string(1, buffer);
-		_vm->parseFile(buffer);
+		vm_assemble_file(_ctx, buffer);
 	}
 	void write_syntax() {
 		printf("asm - assemble file\n");
@@ -85,9 +87,9 @@ public:
 class ShellDisassemble : public ShellCommand {
 
 public:
-	ShellDisassemble(vm::VirtualMachine* vm) : ShellCommand(vm) {}
+	ShellDisassemble(vm_context* ctx) : ShellCommand(ctx) {}
 	void execute(const TextLine& line) {
-		_vm->disassemble();
+		vm_disassemble(_ctx);
 	}
 	void write_syntax() {
 		printf("dsm - disassemble memory\n");
@@ -109,11 +111,11 @@ public:
 class ShellSave : public ShellCommand {
 
 public:
-	ShellSave(vm::VirtualMachine* vm) : ShellCommand(vm) {}
+	ShellSave(vm_context* ctx) : ShellCommand(ctx) {}
 	void execute(const TextLine& line) {
 		char buffer[128];
 		line.get_string(1, buffer);
-		_vm->save(buffer);
+		vm_save(_ctx,buffer);
 	}
 	void write_syntax() {
 		printf("save - saves memory\n");
@@ -135,11 +137,11 @@ public:
 class ShellLoad : public ShellCommand {
 
 public:
-	ShellLoad(vm::VirtualMachine* vm) : ShellCommand(vm) {}
+	ShellLoad(vm_context* ctx) : ShellCommand(ctx) {}
 	void execute(const TextLine& line) {
 		char buffer[128];
 		line.get_string(1, buffer);
-		_vm->load(buffer);
+		vm_load(_ctx, buffer);
 	}
 	void write_syntax() {
 		printf("load - load prg file\n");
@@ -161,12 +163,12 @@ public:
 class ShellDumpMemory : public ShellCommand {
 
 public:
-	ShellDumpMemory(vm::VirtualMachine* vm) : ShellCommand(vm) {}
+	ShellDumpMemory(vm_context* ctx) : ShellCommand(ctx) {}
 	void execute(const TextLine& line) {
 		char buffer[128];
 		line.get_string(1, buffer);
 		int pc = hex2int(buffer);
-		_vm->memoryDump(pc, 128);
+		vm_memory_dump(_ctx, pc, 128);
 	}
 	void write_syntax() {
 		printf("dump - dump memory\n");
@@ -183,12 +185,87 @@ public:
 };
 
 // ------------------------------------------------------
+// Set PC
+// ------------------------------------------------------
+class ShellSetProgramCounter : public ShellCommand {
+
+public:
+	ShellSetProgramCounter(vm_context* ctx) : ShellCommand(ctx) {}
+	void execute(const TextLine& line) {
+		char buffer[128];
+		line.get_string(1, buffer);
+		int pc = hex2int(buffer);
+		_ctx->programCounter = pc;
+	}
+	void write_syntax() {
+		printf("pc - set program counter {adr}\n");
+	}
+	CommandType get_token_type() const {
+		return TOK_SET_PC;
+	}
+	const char* get_command() const {
+		return "set";
+	}
+	int num_params() {
+		return 1;
+	}
+};
+
+// ------------------------------------------------------
+// Run
+// ------------------------------------------------------
+class ShellRun : public ShellCommand {
+
+public:
+	ShellRun(vm_context* ctx) : ShellCommand(ctx) {}
+	void execute(const TextLine& line) {
+		vm_run(_ctx);
+	}
+	void write_syntax() {
+		printf("run\n");
+	}
+	CommandType get_token_type() const {
+		return TOK_RUN;
+	}
+	const char* get_command() const {
+		return "run";
+	}
+	int num_params() {
+		return 0;
+	}
+};
+
+// ------------------------------------------------------
+// Run
+// ------------------------------------------------------
+class ShellStep : public ShellCommand {
+
+public:
+	ShellStep(vm_context* ctx) : ShellCommand(ctx) {}
+	void execute(const TextLine& line) {
+		vm_step(_ctx);
+	}
+	void write_syntax() {
+		printf("step\n");
+	}
+	CommandType get_token_type() const {
+		return TOK_STEP;
+	}
+	const char* get_command() const {
+		return "step";
+	}
+	int num_params() {
+		return 0;
+	}
+};
+
+// ------------------------------------------------------
 // Quit
 // ------------------------------------------------------
 class ShellQuit : public ShellCommand {
 
 public:
-	ShellQuit(vm::VirtualMachine* vm) : ShellCommand(vm) {}
+	ShellQuit(vm_context* ctx) : ShellCommand(ctx) {}
 	void execute(const TextLine& line) {
 		// nothing to do here
 	}
