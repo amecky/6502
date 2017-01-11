@@ -102,7 +102,8 @@ typedef struct vm_context {
 	}
 
 	bool isSet(int idx) const {
-		return ((flags >> idx) & 1 ) == idx;
+		int p = 1 << idx;
+		return (flags & p ) == p;
 	}
 	void write(int idx, uint8_t v) {
 		mem[idx] = v;
