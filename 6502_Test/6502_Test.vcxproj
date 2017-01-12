@@ -66,8 +66,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="AssemblerTest.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="StringTests.cpp" />
+    <ClCompile Include="MainTest.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="catch.hpp" />

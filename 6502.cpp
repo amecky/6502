@@ -19,12 +19,12 @@ const char* JUMPING = "LDA #$03\nJMP there\nBRK\nBRK\nBRK\nthere:\nSTA $0200\n";
 const char* BRANCHING = "LDX #$08\ndecrement:\nDEX\nSTX $0200\nCPX #$03\nBNE decrement\nSTX $0201\nBRK\n";
 
 int _tmain(int argc, _TCHAR* argv[]) {
-	vm_context ctx;
-	vm_clear_context(&ctx);
+	vm_context* ctx = vm_create();
 	int nc = 0;
-	vm_assemble(&ctx, BRANCHING);
-	vm_run(&ctx);
-	vm_dump_registers(&ctx);
+	vm_assemble(BRANCHING);
+	vm_run();
+	vm_dump_registers();
+	vm_release();
 	return 0;
 }
 

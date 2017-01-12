@@ -1,30 +1,84 @@
 /*
- 6502 simulator
+ 6502.h MIT license Andreas Mecky
 
-This is based on the excellent reference documentation at http://www.obelisk.me.uk/6502/reference.htm
+ VERSION: 0.1
 
-The 6502 uese little endian which means it starts with the least significant bit
+ABOUT:
+	This is based on the excellent reference documentation at http://www.obelisk.me.uk/6502/reference.htm
 
-MIT license
-Copyright (c) 2017 Andreas Mecky (meckya@gmail.com)
+	The 6502 uese little endian which means it starts with the least significant bit
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+API:
+	vm_context* vm_create();
+		Creates the internal vm_context. You need to call it once to initialize the virtual machine.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+	void vm_release();
+		Destroys the internal vm_context. Make sure to call it at the end of your program.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+	bool vm_load(const char* fileName);
+
+	void vm_save(const char* fileName);
+
+	int vm_assemble_file(const char* fileName);
+		Loads a text file containing some code and will aee
+	void vm_disassemble();
+
+	int vm_assemble(const char* code);
+
+	void vm_dump(int pc, int num);
+
+	void vm_dump_registers();
+
+	void vm_memory_dump(int pc, int num);
+
+	bool vm_step();
+
+	void vm_run();
+		
+DEFINES:
+	VM_IMPLEMENTATION
+		Please add this to one of your cpp/c file where you are using this. It will include
+		the implementation. Otherwise only the API part of the header is included.
+		#define VM_IMPLEMENTATION
+		#include "6502.h"
+
+	VM_TEST_SUPPORT
+		This is only used internally to be able to unit test all methods. Do not use this define.
+
+USAGE:
+
+
+
+EXAMPLES:
+
+	Assemble some code:
+		vm_context* ctx = vm_create();
+		int num = vm_assemble("LDA #$01\nSTA $0200\nLDA #$05\nSTA $0201\nLDA #$08\nSTA $0202\n");	
+		vm_release();
+
+CHANGELIST:	
+	
+LICENSE:
+	MIT license
+	Copyright (c) 2017 Andreas Mecky (meckya@gmail.com)
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
 
 */
 #pragma once
@@ -80,6 +134,7 @@ typedef void(*vm_LogFunc)(const char* message);
 // The virtual machine vm_context
 // -----------------------------------------------------
 typedef struct vm_context {
+
 	int registers[3];
 	int programCounter;
 	uint8_t mem[65536];
@@ -135,35 +190,106 @@ typedef struct vm_context {
 // ---------------------------------------------------------
 //  API
 // ---------------------------------------------------------
-void vm_clear_context(vm_context* ctx);
+vm_context* vm_create();
 
-bool vm_load(vm_context* ctx, const char* fileName);
+void vm_release();
 
-void vm_save(vm_context* ctx, const char* fileName);
+bool vm_load(const char* fileName);
 
-int vm_assemble_file(vm_context* ctx, const char* fileName);
+void vm_save(const char* fileName);
 
-void vm_disassemble(vm_context* ctx);
+int vm_assemble_file(const char* fileName);
 
-int vm_assemble(vm_context* ctx, const char* text);
+void vm_disassemble();
 
-void vm_dump(vm_context* ctx, int pc, int num);
+int vm_assemble(const char* code);
 
-void vm_dump_registers(vm_context* ctx);
+void vm_dump(int pc, int num);
 
-void vm_memory_dump(vm_context* ctx, int pc, int num);
+void vm_dump_registers();
 
-bool vm_step(vm_context* ctx);
+void vm_memory_dump(int pc, int num);
 
-void vm_run(vm_context* ctx);
+bool vm_step();
+
+void vm_run();
 
 
 #if defined(VM_IMPLEMENTATION)
 
 #include <stdio.h>
 #include <vector>
+#include <stdarg.h>
+
+static vm_context* _internal_ctx = nullptr;
+
+
 
 typedef void(*commandFunc)(vm_context* ctx, int data);
+
+// -----------------------------------------------------
+// No logging log
+// -----------------------------------------------------
+PRIVATE void no_log(const char* message) {
+}
+
+// -----------------------------------------------------
+// No logging log
+// -----------------------------------------------------
+PRIVATE void std_log(const char* message) {
+	printf("%s\n", message);
+}
+
+// -----------------------------------------------------
+// internal logging
+// -----------------------------------------------------
+PRIVATE void vm_log(const char *fmt, ...) {
+	if (_internal_ctx != nullptr) {
+		char buffer[1024];
+		va_list args;
+		va_start(args, fmt);
+		vsnprintf(buffer, sizeof buffer, fmt, args);
+		va_end(args);
+		buffer[(sizeof buffer) - 1] = '\0';
+		(*_internal_ctx->logFunction)(buffer);
+	}
+}
+
+
+// -----------------------------------------------------
+// create internal context
+// -----------------------------------------------------
+vm_context* vm_create() {
+	if (_internal_ctx == nullptr) {
+		_internal_ctx = new vm_context;
+		for (int i = 0; i < 65536; ++i) {
+			_internal_ctx->mem[i] = 0;
+		}
+		_internal_ctx->registers[0] = 0;
+		_internal_ctx->registers[1] = 0;
+		_internal_ctx->registers[2] = 0;
+		for (int i = 0; i < 7; ++i) {
+			_internal_ctx->clearFlag(i);
+		}
+		_internal_ctx->numCommands = 0;
+		_internal_ctx->numBytes = 0;
+		_internal_ctx->programCounter = 0x600;
+		_internal_ctx->sp = 255;
+		_internal_ctx->logFunction = no_log;
+		_internal_ctx->logFunction = std_log;
+	}
+	return _internal_ctx;
+}
+
+// -----------------------------------------------------
+// release internal context
+// -----------------------------------------------------
+void vm_release() {
+	if (_internal_ctx != nullptr) {
+		delete _internal_ctx;
+		_internal_ctx = nullptr;
+	}
+}
 
 PRIVATE uint8_t low_value(int value) {
 	return value & 255;
@@ -1379,30 +1505,32 @@ PRIVATE vm_addressing_mode get_addressing_mode(const Tokenizer & tokenizer, int 
 // -----------------------------------------------------------------
 // disassemble memory
 // -----------------------------------------------------------------
-void vm_disassemble(vm_context* ctx) {
-	int pc = 0x600;
-	int end = pc + ctx->numBytes;
-	while (pc < end) {
-		uint8_t hex = ctx->read(pc);
-		const vm_command_mapping& mapping = get_command_mapping(hex);
-		const vm_command& cmd = VM_COMMANDS[mapping.op_code];
-		printf("%04X ",pc);
-		printf("%s ", cmd.name);
-		switch (mapping.mode) {
-			case IMMEDIDATE: printf("#$%02X",ctx->read(pc+1)); break;
-			case ABSOLUTE_ADR : printf("$%04X",ctx->readInt(pc+1)); break;
-			case ABSOLUTE_X: printf("$%04X,X", ctx->readInt(pc + 1)); break;
-			case ABSOLUTE_Y: printf("$%04X,Y", ctx->readInt(pc + 1)); break;
-			case ZERO_PAGE: printf("$%02X", ctx->read(pc + 1)); break;
-			case ZERO_PAGE_X: printf("$%02X,X", ctx->read(pc + 1)); break;
-			case ZERO_PAGE_Y: printf("$%02X,Y", ctx->read(pc + 1)); break;
-			case INDIRECT_X: printf("$(%04X),X", ctx->readInt(pc + 1)); break;
-			case INDIRECT_Y: printf("$(%04X),Y", ctx->readInt(pc + 1)); break;
-			case RELATIVE_ADR: printf("$%02X", ctx->read(pc + 1)); break;
+void vm_disassemble() {
+	if (_internal_ctx != nullptr) {
+		int pc = 0x600;
+		int end = pc + _internal_ctx->numBytes;
+		while (pc < end) {
+			uint8_t hex = _internal_ctx->read(pc);
+			const vm_command_mapping& mapping = get_command_mapping(hex);
+			const vm_command& cmd = VM_COMMANDS[mapping.op_code];
+			printf("%04X ", pc);
+			printf("%s ", cmd.name);
+			switch (mapping.mode) {
+			case IMMEDIDATE: printf("#$%02X", _internal_ctx->read(pc + 1)); break;
+			case ABSOLUTE_ADR: printf("$%04X", _internal_ctx->readInt(pc + 1)); break;
+			case ABSOLUTE_X: printf("$%04X,X", _internal_ctx->readInt(pc + 1)); break;
+			case ABSOLUTE_Y: printf("$%04X,Y", _internal_ctx->readInt(pc + 1)); break;
+			case ZERO_PAGE: printf("$%02X", _internal_ctx->read(pc + 1)); break;
+			case ZERO_PAGE_X: printf("$%02X,X", _internal_ctx->read(pc + 1)); break;
+			case ZERO_PAGE_Y: printf("$%02X,Y", _internal_ctx->read(pc + 1)); break;
+			case INDIRECT_X: printf("$(%04X),X", _internal_ctx->readInt(pc + 1)); break;
+			case INDIRECT_Y: printf("$(%04X),Y", _internal_ctx->readInt(pc + 1)); break;
+			case RELATIVE_ADR: printf("$%02X", _internal_ctx->read(pc + 1)); break;
 			case ACCUMULATOR: printf("A"); break;
+			}
+			printf("\n");
+			pc += VM_DATA_SIZE[mapping.mode] + 1;
 		}
-		printf("\n");
-		pc += VM_DATA_SIZE[mapping.mode] + 1;
 	}
 }
 	
@@ -1419,13 +1547,13 @@ typedef struct vm_label_definition {
 // convert tokens 
 // -----------------------------------------------------------------
 PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, int* numCommands) {
-	printf("tokens: %d\n", tokenizer.num());
+	vm_log("tokens: %d", tokenizer.num());
 	int pc = 0x600;
 	std::vector<vm_label_definition> definitions;
 	std::vector<vm_label_definition> branches;
 	for (size_t i = 0; i < tokenizer.num(); ++i) {
 		const vm_token& t = tokenizer.get(i);
-		printf("%d = %s (line: %d)\n", i, translate_token_tpye(t), t.line);
+		vm_log("%d = %s (line: %d)", i, translate_token_tpye(t), t.line);
 		if (t.type == vm_token::COMMAND) {
 			if (numCommands != nullptr) {
 				++*numCommands;
@@ -1436,7 +1564,7 @@ PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, int* numComma
 				mode = get_addressing_mode(tokenizer, i);
 			}
 			uint8_t hex = get_hex_value(t, mode);
-			printf("=> index: %d  mode: %s cmd: %s (%X)\n", t.value, translate_addressing_mode(mode), cmd.name, hex);
+			vm_log("=> index: %d  mode: %s cmd: %s (%X)", t.value, translate_addressing_mode(mode), cmd.name, hex);
 			ctx->write(pc++, hex);
 			if (mode == vm_addressing_mode::IMMEDIDATE) {
 				const vm_token& next = tokenizer.get(i + 2);
@@ -1508,16 +1636,18 @@ PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, int* numComma
 // ---------------------------------------------------------
 //  assemble file
 // ---------------------------------------------------------
-int vm_assemble_file(vm_context* ctx, const char* fileName) {
-	Tokenizer tokenizer;
-	if (tokenizer.parseFile(fileName)) {
-		ctx->numBytes = assemble(tokenizer, ctx, &ctx->numCommands);
-		//save(buffer);
-		vm_memory_dump(ctx, 0x600, ctx->numBytes);
-		return ctx->numBytes;
-	}
-	else {
-		printf("ERROR: cannot laod file: '%s'\n", fileName);
+int vm_assemble_file(const char* fileName) {
+	if (_internal_ctx != nullptr) {
+		Tokenizer tokenizer;
+		if (tokenizer.parseFile(fileName)) {
+			_internal_ctx->numBytes = assemble(tokenizer, _internal_ctx, &_internal_ctx->numCommands);
+			//save(buffer);
+			vm_memory_dump(0x600, _internal_ctx->numBytes);
+			return _internal_ctx->numBytes;
+		}
+		else {
+			printf("ERROR: cannot laod file: '%s'\n", fileName);
+		}
 	}
 	return 0;
 }
@@ -1525,13 +1655,15 @@ int vm_assemble_file(vm_context* ctx, const char* fileName) {
 // ---------------------------------------------------------
 //  assemble 
 // ---------------------------------------------------------
-int vm_assemble(vm_context* ctx, const char* text) {
-	Tokenizer tokenizer;
-	if (tokenizer.parse(text)) {
-		ctx->numBytes = assemble(tokenizer, ctx, &ctx->numCommands);
-		//save(buffer);
-		vm_memory_dump(ctx, 0x600, ctx->numBytes);
-		return ctx->numBytes;
+int vm_assemble(const char* code) {
+	if (_internal_ctx != nullptr) {
+		Tokenizer tokenizer;
+		if (tokenizer.parse(code)) {
+			_internal_ctx->numBytes = assemble(tokenizer, _internal_ctx, &_internal_ctx->numCommands);
+			//save(buffer);
+			vm_memory_dump(0x600, _internal_ctx->numBytes);
+			return _internal_ctx->numBytes;
+		}
 	}
 	return 0;
 }
@@ -1539,45 +1671,49 @@ int vm_assemble(vm_context* ctx, const char* text) {
 // -------------------------------------------------------- -
 //  dump registers and memory
 // ---------------------------------------------------------
-void vm_dump(vm_context* ctx, int pc, int num) {
-	vm_dump_registers(ctx);
-	vm_memory_dump(ctx, pc, num);
+void vm_dump(int pc, int num) {
+	vm_dump_registers();
+	vm_memory_dump(pc, num);
 }
 
 // ---------------------------------------------------------
 //  dump registers 
 // ---------------------------------------------------------
-void vm_dump_registers(vm_context* ctx) {
-	printf("------------- Dump -------------\n");
-	printf("A=$%02X ", ctx->registers[0]);
-	printf("X=$%02X ", ctx->registers[1]);
-	printf("Y=$%02X\n", ctx->registers[2]);
-	printf("PC=$%04X ", ctx->programCounter);
-	printf("SP=$%02X\n", ctx->sp);
-	printf("CZIDBVN\n");
-	for (int i = 1; i < 8; ++i) {
-		if (ctx->isSet(i)) {
-			printf("1");
+void vm_dump_registers() {
+	if (_internal_ctx != nullptr) {
+		printf("------------- Dump -------------\n");
+		printf("A=$%02X ", _internal_ctx->registers[0]);
+		printf("X=$%02X ", _internal_ctx->registers[1]);
+		printf("Y=$%02X\n", _internal_ctx->registers[2]);
+		printf("PC=$%04X ", _internal_ctx->programCounter);
+		printf("SP=$%02X\n", _internal_ctx->sp);
+		printf("CZIDBVN\n");
+		for (int i = 1; i < 8; ++i) {
+			if (_internal_ctx->isSet(i)) {
+				printf("1");
+			}
+			else {
+				printf("0");
+			}
 		}
-		else {
-			printf("0");
-		}
+		printf("\n");
 	}
-	printf("\n");
 }
 
 // ---------------------------------------------------------
 //  memory dump
 // ---------------------------------------------------------
-void vm_memory_dump(vm_context* ctx, int pc, int num) {
-	printf("---------- Memory dump -----------");
-	for (size_t i = 0; i < num; ++i) {
-		if (i % 8 == 0) {
-			printf("\n%04X : ", (pc + i));
+void vm_memory_dump(int pc, int num) {
+	if (_internal_ctx != nullptr) {
+		printf("---------- Memory dump -----------");
+		for (size_t i = 0; i < num; ++i) {
+			if (i % 8 == 0) {
+				printf("\n%04X : ", (pc + i));
+			}
+			printf("%02X ", _internal_ctx->read(pc + i));
 		}
-		printf("%02X ", ctx->read(pc + i));
+		printf("\n");
 	}
-	printf("\n");
 }
 
 PRIVATE int get_data(vm_context* ctx, const vm_addressing_mode& mode) {
@@ -1624,94 +1760,84 @@ PRIVATE int get_data(vm_context* ctx, const vm_addressing_mode& mode) {
 // ---------------------------------------------------------
 //  internal execute single step
 // ---------------------------------------------------------
-PRIVATE bool vm_step(vm_context* ctx) {
-	uint8_t cmdIdx = ctx->read(ctx->programCounter);
-	const vm_command_mapping& mapping = get_command_mapping(cmdIdx);
-	const vm_command& cmd = VM_COMMANDS[mapping.op_code];
-	vm_addressing_mode mode = mapping.mode;
-	int data = get_data(ctx, mode);
-	int add = VM_DATA_SIZE[mode] + 1;
-	(*cmd.function)(ctx, data);
-	printf("%04X %s (%02X) data: %04X add: %d\n", ctx->programCounter, cmd.name, cmdIdx, data, add);
-	if (!cmd.modifyPC) {
-		ctx->programCounter += add;
+PRIVATE bool vm_step() {
+	if (_internal_ctx != nullptr) {
+		uint8_t cmdIdx = _internal_ctx->read(_internal_ctx->programCounter);
+		const vm_command_mapping& mapping = get_command_mapping(cmdIdx);
+		const vm_command& cmd = VM_COMMANDS[mapping.op_code];
+		vm_addressing_mode mode = mapping.mode;
+		int data = get_data(_internal_ctx, mode);
+		int add = VM_DATA_SIZE[mode] + 1;
+		(*cmd.function)(_internal_ctx, data);
+		printf("%04X %s (%02X) data: %04X add: %d\n", _internal_ctx->programCounter, cmd.name, cmdIdx, data, add);
+		if (!cmd.modifyPC) {
+			_internal_ctx->programCounter += add;
+		}
+		if (mapping.op_code == BRK) {
+			return false;
+		}
+		return true;
 	}
-	if (mapping.op_code == BRK) {
-		return false;
-	}
-	return true;
+	return false;
 }
 
 // ---------------------------------------------------------
 //  run program
 // ---------------------------------------------------------
-void vm_run(vm_context* ctx) {
-	ctx->programCounter = 0x600;
-	int end = ctx->programCounter + ctx->numBytes;
-	bool running = true;
-	while (running) {
-		running = vm_step(ctx);		
-		if (ctx->programCounter >= end) {
-			running = false;
+void vm_run() {
+	if (_internal_ctx != nullptr) {
+		_internal_ctx->programCounter = 0x600;
+		int end = _internal_ctx->programCounter + _internal_ctx->numBytes;
+		bool running = true;
+		while (running) {
+			running = vm_step();
+			if (_internal_ctx->programCounter >= end) {
+				running = false;
+			}
 		}
 	}
-}
-
-// ---------------------------------------------------------
-//  clear context
-// ---------------------------------------------------------
-void vm_clear_context(vm_context* ctx) {
-	for (int i = 0; i < 65536; ++i) {
-		ctx->mem[i] = 0;
-	}
-	ctx->registers[0] = 0;
-	ctx->registers[1] = 0;
-	ctx->registers[2] = 0;
-	for (int i = 0; i < 7; ++i) {
-		ctx->clearFlag(i);
-	}
-	ctx->numCommands = 0;
-	ctx->numBytes = 0;
-	ctx->programCounter = 0x600;
-	ctx->sp = 255;
 }
 
 // ---------------------------------------------------------
 //  load binary file
 // ---------------------------------------------------------
-bool vm_load(vm_context* ctx, const char* fileName) {
-	int pc = 0x600;
-	FILE* fp = fopen(fileName, "rb");
-	if (fp) {
-		fread(&ctx->numBytes, sizeof(int), 1, fp);
-		fread(&ctx->numCommands, sizeof(int), 1, fp);
-		for (int i = 0; i < ctx->numBytes; ++i) {
-			uint8_t v;
-			fread(&v, sizeof(uint8_t), 1, fp);
-			ctx->write(pc + i, v);
+bool vm_load(const char* fileName) {
+	if (_internal_ctx != nullptr) {
+		int pc = 0x600;
+		FILE* fp = fopen(fileName, "rb");
+		if (fp) {
+			fread(&_internal_ctx->numBytes, sizeof(int), 1, fp);
+			fread(&_internal_ctx->numCommands, sizeof(int), 1, fp);
+			for (int i = 0; i < _internal_ctx->numBytes; ++i) {
+				uint8_t v;
+				fread(&v, sizeof(uint8_t), 1, fp);
+				_internal_ctx->write(pc + i, v);
+			}
+			fclose(fp);
+			printf("Loaded bytes: %d commands: %d\n", _internal_ctx->numBytes, _internal_ctx->numCommands);
+			return true;
 		}
-		fclose(fp);
-		printf("Loaded bytes: %d commands: %d\n", ctx->numBytes,ctx->numCommands);
-		return true;
+		printf("file '%s' not found", fileName);
 	}
-	printf("file '%s' not found", fileName);
 	return false;
 }
 
 // ---------------------------------------------------------
 //  save binary file
 // ---------------------------------------------------------
-void vm_save(vm_context* ctx, const char* fileName) {
-	FILE* fp = fopen(fileName, "wb");
-	if (fp) {
-		int pc = 0x600;
-		fwrite(&ctx->numBytes, sizeof(int), 1, fp);
-		fwrite(&ctx->numCommands, sizeof(int), 1, fp);
-		for (int i = 0; i < ctx->numBytes; ++i) {
-			uint8_t v = ctx->read(pc + i);
-			fwrite(&v, sizeof(uint8_t), 1, fp);
+void vm_save(const char* fileName) {
+	if (_internal_ctx != nullptr) {
+		FILE* fp = fopen(fileName, "wb");
+		if (fp) {
+			int pc = 0x600;
+			fwrite(&_internal_ctx->numBytes, sizeof(int), 1, fp);
+			fwrite(&_internal_ctx->numCommands, sizeof(int), 1, fp);
+			for (int i = 0; i < _internal_ctx->numBytes; ++i) {
+				uint8_t v = _internal_ctx->read(pc + i);
+				fwrite(&v, sizeof(uint8_t), 1, fp);
+			}
+			fclose(fp);
 		}
-		fclose(fp);
 	}
 }
 

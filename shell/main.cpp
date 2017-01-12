@@ -46,15 +46,13 @@ struct CommandLine {
 class ShellCommand {
 
 public:
-	ShellCommand(vm_context* ctx) : _ctx(ctx) {}
+	ShellCommand() {}
 	virtual ~ShellCommand() {}
 	virtual void execute(const TextLine& line) = 0;
 	virtual void write_syntax() = 0;
 	virtual int num_params() = 0;
 	virtual CommandType get_token_type() const = 0;
 	virtual const char* get_command() const = 0;
-protected:
-	vm_context* _ctx;
 };
 
 // ------------------------------------------------------
@@ -63,11 +61,11 @@ protected:
 class ShellAssemble : public ShellCommand {
 
 public:
-	ShellAssemble(vm_context* ctx) : ShellCommand(ctx) {}
+	ShellAssemble() {}
 	void execute(const TextLine& line) {
 		char buffer[128];
 		line.get_string(1, buffer);
-		vm_assemble_file(_ctx, buffer);
+		vm_assemble_file(buffer);
 	}
 	void write_syntax() {
 		printf("asm - assemble file\n");
@@ -89,9 +87,9 @@ public:
 class ShellDisassemble : public ShellCommand {
 
 public:
-	ShellDisassemble(vm_context* ctx) : ShellCommand(ctx) {}
+	ShellDisassemble() {}
 	void execute(const TextLine& line) {
-		vm_disassemble(_ctx);
+		vm_disassemble();
 	}
 	void write_syntax() {
 		printf("dsm - disassemble memory\n");
@@ -113,11 +111,11 @@ public:
 class ShellSave : public ShellCommand {
 
 public:
-	ShellSave(vm_context* ctx) : ShellCommand(ctx) {}
+	ShellSave() {}
 	void execute(const TextLine& line) {
 		char buffer[128];
 		line.get_string(1, buffer);
-		vm_save(_ctx, buffer);
+		vm_save(buffer);
 	}
 	void write_syntax() {
 		printf("save - saves memory\n");
@@ -139,11 +137,11 @@ public:
 class ShellLoad : public ShellCommand {
 
 public:
-	ShellLoad(vm_context* ctx) : ShellCommand(ctx) {}
+	ShellLoad() {}
 	void execute(const TextLine& line) {
 		char buffer[128];
 		line.get_string(1, buffer);
-		vm_load(_ctx, buffer);
+		vm_load(buffer);
 	}
 	void write_syntax() {
 		printf("load - load prg file\n");
@@ -165,12 +163,12 @@ public:
 class ShellDumpMemory : public ShellCommand {
 
 public:
-	ShellDumpMemory(vm_context* ctx) : ShellCommand(ctx) {}
+	ShellDumpMemory() {}
 	void execute(const TextLine& line) {
 		char buffer[128];
 		line.get_string(1, buffer);
 		int pc = hex2int(buffer);
-		vm_memory_dump(_ctx, pc, 128);
+		vm_memory_dump(pc, 128);
 	}
 	void write_syntax() {
 		printf("dump - dump memory\n");
@@ -192,12 +190,12 @@ public:
 class ShellSetProgramCounter : public ShellCommand {
 
 public:
-	ShellSetProgramCounter(vm_context* ctx) : ShellCommand(ctx) {}
+	ShellSetProgramCounter() {}
 	void execute(const TextLine& line) {
 		char buffer[128];
 		line.get_string(1, buffer);
 		int pc = hex2int(buffer);
-		_ctx->programCounter = pc;
+		//_ctx->programCounter = pc;
 	}
 	void write_syntax() {
 		printf("pc - set program counter {adr}\n");
@@ -219,9 +217,9 @@ public:
 class ShellRun : public ShellCommand {
 
 public:
-	ShellRun(vm_context* ctx) : ShellCommand(ctx) {}
+	ShellRun() {}
 	void execute(const TextLine& line) {
-		vm_run(_ctx);
+		vm_run();
 	}
 	void write_syntax() {
 		printf("run\n");
@@ -243,9 +241,9 @@ public:
 class ShellStep : public ShellCommand {
 
 public:
-	ShellStep(vm_context* ctx) : ShellCommand(ctx) {}
+	ShellStep() {}
 	void execute(const TextLine& line) {
-		vm_step(_ctx);
+		vm_step();
 	}
 	void write_syntax() {
 		printf("step\n");
@@ -267,7 +265,7 @@ public:
 class ShellQuit : public ShellCommand {
 
 public:
-	ShellQuit(vm_context* ctx) : ShellCommand(ctx) {}
+	ShellQuit() {}
 	void execute(const TextLine& line) {
 		// nothing to do here
 	}
@@ -291,7 +289,7 @@ public:
 class ShellHelp : public ShellCommand {
 
 public:
-	ShellHelp(vm_context* ctx) : ShellCommand(ctx) {}
+	ShellHelp() {}
 	void execute(const TextLine& line) {
 		// nothing to do here
 	}
@@ -318,15 +316,20 @@ class Shell {
 
 public:
 	Shell() {
-		_commands[TOK_QUIT] = new ShellQuit(&_ctx);
-		_commands[TOK_ASSEMBLE] = new ShellAssemble(&_ctx);
-		_commands[TOK_SAVE] = new ShellSave(&_ctx);
-		_commands[TOK_LOAD] = new ShellLoad(&_ctx);
-		_commands[TOK_DUMP_MEMORY] = new ShellDumpMemory(&_ctx);
-		_commands[TOK_DISASSEMBLE] = new ShellDisassemble(&_ctx);
-		_commands[TOK_RUN] = new ShellRun(&_ctx);
-		_commands[TOK_SET_PC] = new ShellSetProgramCounter(&_ctx);
-		_commands[TOK_HELP] = new ShellHelp(&_ctx);
+		_ctx = vm_create();
+		_commands[TOK_QUIT] = new ShellQuit();
+		_commands[TOK_ASSEMBLE] = new ShellAssemble();
+		_commands[TOK_SAVE] = new ShellSave();
+		_commands[TOK_LOAD] = new ShellLoad();
+		_commands[TOK_DUMP_MEMORY] = new ShellDumpMemory();
+		_commands[TOK_DISASSEMBLE] = new ShellDisassemble();
+		_commands[TOK_RUN] = new ShellRun();
+		_commands[TOK_SET_PC] = new ShellSetProgramCounter();
+		_commands[TOK_HELP] = new ShellHelp();
+	}
+
+	~Shell() {
+		vm_release();
 	}
 
 	bool extract(const char* p, CommandLine * command_line) {
@@ -366,7 +369,7 @@ public:
 	}
 private:
 	Commands _commands;
-	vm_context _ctx;
+	vm_context* _ctx;
 };
 
 int main(int argc, char* argv[]) {
