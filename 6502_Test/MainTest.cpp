@@ -121,3 +121,17 @@ TEST_CASE("ROL", "[CommandTest]") {
 	REQUIRE(ctx->isSet(vm_flags::C) == false);
 	vm_release();
 }
+
+TEST_CASE("GetData", "[ADR_MODE]") {
+	vm_context* ctx = vm_create();
+	ctx->programCounter = 0;
+	ctx->mem[1] = 6;
+	ctx->registers[1] = 2;
+	int tst = get_data(ctx, vm_addressing_mode::ZERO_PAGE_X);
+	REQUIRE(tst == 8);
+	ctx->mem[1] = 0xfe;
+	ctx->registers[1] = 5;
+	tst = get_data(ctx, vm_addressing_mode::ZERO_PAGE_X);
+	REQUIRE(tst == 3);
+	vm_release();
+}

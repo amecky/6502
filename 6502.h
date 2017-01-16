@@ -457,6 +457,88 @@ PRIVATE void vm_op_inc(vm_context* ctx, int data) {
 // ADC
 // ------------------------------------------
 PRIVATE void adc(vm_context* ctx, int data) {
+	/*
+	Remember the two purposes of the carry flag? The first purpose was to allow addition and subtraction to be extended beyond 8 bits. The carry is still used for this purpose when adding or subtracting twos complement numbers. For example:
+
+	CLC       ; RESULT = NUM1 + NUM2
+	LDA NUM1L
+	ADC NUM2L
+	STA RESULTL
+	LDA NUM1H
+	ADC NUM2H
+	STA RESULTH
+
+	The carry from the ADC NUM2L is used by the ADC NUM2H.
+
+	The second purpose was to indicate when the number was outside the (unsigned) range, 0 to 255. But the range of a 8-bit twos complement number is -128 to 127, and the carry does not indicate whether the result is outside this range, as the following examples illustrate:
+
+	CLC      ; 1 + 1 = 2, returns C = 0
+	LDA #$01
+	ADC #$01
+
+	CLC      ; 1 + -1 = 0, returns C = 1
+	LDA #$01
+	ADC #$FF
+
+	CLC      ; 127 + 1 = 128, returns C = 0
+	LDA #$7F
+	ADC #$01
+
+	CLC      ; -128 + -1 = -129, returns C = 1
+	LDA #$80
+	ADC #$FF
+
+	This is where V comes in. V indicates whether the result of an addition or subraction is outside the range -128 to 127, i.e. whether there is a twos complement overflow. A few examples are in order:
+
+	CLC      ; 1 + 1 = 2, returns V = 0
+	LDA #$01
+	ADC #$01
+
+	CLC      ; 1 + -1 = 0, returns V = 0
+	LDA #$01
+	ADC #$FF
+
+	CLC      ; 127 + 1 = 128, returns V = 1
+	LDA #$7F
+	ADC #$01
+
+	CLC      ; -128 + -1 = -129, returns V = 1
+	LDA #$80
+	ADC #$FF
+
+	SEC      ; 0 - 1 = -1, returns V = 0
+	LDA #$00
+	SBC #$01
+
+	SEC      ; -128 - 1 = -129, returns V = 1
+	LDA #$80
+	SBC #$01
+
+	SEC      ; 127 - -1 = 128, returns V = 1
+	LDA #$7F
+	SBC #$FF
+
+	Remember that ADC and SBC not only affect the carry flag, but they also use the value of the carry flag (i.e. the value before the ADC or SBC), and this will affect the result and will affect V. For example:
+
+	SEC      ; Note: SEC, not CLC
+	LDA #$3F ; 63 + 64 + 1 = 128, returns V = 1
+	ADC #$40
+
+	CLC      ; Note: CLC, not SEC
+	LDA #$C0 ; -64 - 64 - 1 = -129, returns V = 1
+	SBC #$40
+
+	The same principles apply when adding or subtracting 16-bit two complement numbers. For example:
+
+	SEC         ; RESULT = NUM1 - NUM2
+	LDA NUM1L   ; After the SBC NUM2H instruction:
+	SBC NUM2L   ;   V = 0 if -32768 <= RESULT <= 32767
+	STA RESULTL ;   V = 1 if RESULT < -32768 or RESULT > 32767
+	LDA NUM1H
+	SBC NUM2H
+	STA RESULTH
+
+	*/
 	ctx->registers[0] += data;
 	if (ctx->registers[0] == 0) {
 		ctx->setFlag(vm_flags::Z);
@@ -1169,7 +1251,6 @@ typedef struct vm_token {
 
 	vm_token(TokenType t) : type(t), value(0), hash(0) {}
 	vm_token(TokenType t, int v) : type(t), value(v), hash(0) {}
-	//Token(TokenType t, uint32_t st, int s) : type(t), value(0), hash(st), size(s) {}
 
 	TokenType type;
 	int value;
@@ -1291,6 +1372,7 @@ public:
 		return parse(_text);
 	}
 
+	// FIXME: support comments which starts with ;
 	bool Tokenizer::parse(const char* text) {
 		_text = text;
 		int cnt = 0;
@@ -1323,6 +1405,10 @@ public:
 				char *out;
 				token = vm_token(vm_token::NUMBER, str2f(p, &out));
 				p = out;
+			}
+			else if (*p == ';') {
+				while (*p != '\n')
+					p++;
 			}
 			else {
 				switch (*p) {
@@ -1737,10 +1823,18 @@ PRIVATE int get_data(vm_context* ctx, const vm_addressing_mode& mode) {
 		data = ctx->read(ctx->programCounter + 1);
 	}
 	else if (mode == ZERO_PAGE_X) {
-		data = ctx->read(ctx->programCounter + 1) + ctx->registers[1];
+		int tmp = ctx->read(ctx->programCounter + 1) + ctx->registers[1];
+		if (tmp > 255) {
+			tmp = abs(256 - tmp);
+		}
+		data = tmp;
 	}
 	else if (mode == ZERO_PAGE_Y) {
-		data = ctx->read(ctx->programCounter + 1) + ctx->registers[2];
+		int tmp = ctx->read(ctx->programCounter + 1) + ctx->registers[2];
+		if (tmp > 255) {
+			tmp = abs(256 - tmp);
+		}
+		data = tmp;
 	}
 	else if (mode == RELATIVE_ADR) {
 		data = ctx->read(ctx->programCounter + 1);
