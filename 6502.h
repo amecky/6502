@@ -20,10 +20,13 @@ API:
 	void vm_save(const char* fileName);
 
 	int vm_assemble_file(const char* fileName);
-		Loads a text file containing some code and will aee
-	void vm_disassemble();
+		Loads a text file containing some code and will assemble it.
 
 	int vm_assemble(const char* code);
+		This method will assemble the provided code.
+		
+	void vm_disassemble();
+		Disassemble the memory at 0x600.
 
 	void vm_dump(int pc, int num);
 
@@ -32,8 +35,10 @@ API:
 	void vm_memory_dump(int pc, int num);
 
 	bool vm_step();
-
+		Single step through the code. If you want to start from the beginning of the code set the
+		program counter in the context to 0x600
 	void vm_run();
+		Will run the code at 0x600. Make sure you have either loaded or assembled some code before.
 		
 DEFINES:
 	VM_IMPLEMENTATION
@@ -115,6 +120,13 @@ typedef enum vm_addressing_mode {
 } vm_addressing_mode;
 
 // -----------------------------------------------------
+// registers
+// -----------------------------------------------------
+typedef enum vm_registers {
+	A, X, Y
+} vm_registers;
+
+// -----------------------------------------------------
 // Flags
 // -----------------------------------------------------
 typedef enum vm_flags {
@@ -136,39 +148,40 @@ typedef void(*vm_LogFunc)(const char* message);
 typedef struct vm_context {
 
 	int registers[3];
-	int programCounter;
+	uint8_t a, x, y;
+	uint16_t programCounter;
 	uint8_t mem[65536];
 	uint8_t sp;
 	uint8_t flags;
-	int numCommands;
-	int numBytes;
+	uint16_t numCommands;
+	uint16_t numBytes;
 	vm_LogFunc logFunction;
 
 	void clearFlags() {
 		flags = 0;
 	}
 
-	void setFlag(int idx) {
+	void setFlag(uint8_t idx) {
 		flags |= 1 << idx;
 	}
 
-	void clearFlag(int idx) {
+	void clearFlag(uint8_t idx) {
 		flags &= ~(1 << idx);
 	}
 
-	bool isSet(int idx) const {
+	bool isSet(uint8_t idx) const {
 		int p = 1 << idx;
 		return (flags & p ) == p;
 	}
-	void write(int idx, uint8_t v) {
+	void write(uint16_t idx, uint8_t v) {
 		mem[idx] = v;
 	}
 
-	uint8_t read(int idx) const {
+	uint8_t read(uint16_t idx) const {
 		return mem[idx];
 	}
 
-	int readInt(int idx) const {
+	int readInt(uint16_t idx) const {
 		uint8_t upper = read(idx + 1);
 		int data = read(idx) + (upper << 8);
 		return data;
@@ -265,9 +278,12 @@ vm_context* vm_create() {
 		for (int i = 0; i < 65536; ++i) {
 			_internal_ctx->mem[i] = 0;
 		}
-		_internal_ctx->registers[0] = 0;
-		_internal_ctx->registers[1] = 0;
-		_internal_ctx->registers[2] = 0;
+		_internal_ctx->a = 0;
+		_internal_ctx->x = 0;
+		_internal_ctx->y = 0;
+		_internal_ctx->registers[vm_registers::A] = 0;
+		_internal_ctx->registers[vm_registers::X] = 0;
+		_internal_ctx->registers[vm_registers::Y] = 0;
 		for (int i = 0; i < 7; ++i) {
 			_internal_ctx->clearFlag(i);
 		}
@@ -344,7 +360,7 @@ PRIVATE void vm_op_nop(vm_context* ctx, int pc) {
 // LDA
 // ------------------------------------------
 PRIVATE void vm_op_lda(vm_context* ctx, int data) {
-	ctx->registers[0] = data;
+	ctx->registers[vm_registers::A] = data;
 	vm_set_zero_flag(ctx, data);
 	vm_set_negative_flag(ctx, data);
 }
@@ -353,7 +369,7 @@ PRIVATE void vm_op_lda(vm_context* ctx, int data) {
 // LDX
 // ------------------------------------------
 PRIVATE void vm_op_ldx(vm_context* ctx, int data) {
-	ctx->registers[1] = data;
+	ctx->registers[vm_registers::X] = data;
 	vm_set_zero_flag(ctx, data);
 	vm_set_negative_flag(ctx, data);
 }
@@ -362,7 +378,7 @@ PRIVATE void vm_op_ldx(vm_context* ctx, int data) {
 // LDY
 // ------------------------------------------
 PRIVATE void vm_op_ldy(vm_context* ctx, int data) {
-	ctx->registers[2] = data;
+	ctx->registers[vm_registers::Y] = data;
 	vm_set_zero_flag(ctx, data);
 	vm_set_negative_flag(ctx, data);
 }
@@ -371,14 +387,14 @@ PRIVATE void vm_op_ldy(vm_context* ctx, int data) {
 // STX
 // ------------------------------------------
 PRIVATE void vm_op_stx(vm_context* ctx, int data) {
-	ctx->write(data, ctx->registers[1]);
+	ctx->write(data, ctx->registers[vm_registers::X]);
 }
 
 // ------------------------------------------
 // STY
 // ------------------------------------------
 PRIVATE void vm_op_sty(vm_context* ctx, int data) {
-	ctx->write(data, ctx->registers[1]);
+	ctx->write(data, ctx->registers[vm_registers::Y]);
 }
 
 
@@ -386,66 +402,67 @@ PRIVATE void vm_op_sty(vm_context* ctx, int data) {
 // STA
 // ------------------------------------------
 PRIVATE void vm_op_sta(vm_context* ctx, int data) {
-	ctx->write(data, ctx->registers[0]);
+	ctx->write(data, ctx->registers[vm_registers::A]);
 }
 
 // ------------------------------------------
 // TAX
 // ------------------------------------------
 PRIVATE void vm_op_tax(vm_context* ctx, int data) {
-	ctx->registers[1] = ctx->registers[0];
-	vm_set_zero_flag(ctx, ctx->registers[1]);
-	vm_set_negative_flag(ctx, ctx->registers[1]);
+	ctx->registers[vm_registers::X] = ctx->registers[vm_registers::A];
+	vm_set_zero_flag(ctx, ctx->registers[vm_registers::X]);
+	vm_set_negative_flag(ctx, ctx->registers[vm_registers::X]);
 }
 
 // ------------------------------------------
 // TAY
 // ------------------------------------------
 PRIVATE void vm_op_tay(vm_context* ctx, int data) {
-	ctx->registers[2] = ctx->registers[0];
-	vm_set_zero_flag(ctx, ctx->registers[2]);
-	vm_set_negative_flag(ctx, ctx->registers[2]);
+	ctx->registers[vm_registers::Y] = ctx->registers[vm_registers::A];
+	vm_set_zero_flag(ctx, ctx->registers[vm_registers::Y]);
+	vm_set_negative_flag(ctx, ctx->registers[vm_registers::Y]);
 }
 
 // ------------------------------------------
 // TYA
 // ------------------------------------------
 PRIVATE void vm_op_tya(vm_context* ctx, int data) {
-	ctx->registers[0] = ctx->registers[2];
-	vm_set_zero_flag(ctx, ctx->registers[0]);
-	vm_set_negative_flag(ctx, ctx->registers[0]);
+	ctx->registers[vm_registers::A] = ctx->registers[vm_registers::Y];
+	vm_set_zero_flag(ctx, ctx->registers[vm_registers::A]);
+	vm_set_negative_flag(ctx, ctx->registers[vm_registers::A]);
 }
 
 // ------------------------------------------
 // TXA
 // ------------------------------------------
 PRIVATE void vm_op_txa(vm_context* ctx, int data) {
-	ctx->registers[0] = ctx->registers[1];
-	vm_set_zero_flag(ctx, ctx->registers[0]);
-	vm_set_negative_flag(ctx, ctx->registers[0]);
+	ctx->registers[vm_registers::A] = ctx->registers[vm_registers::X];
+	vm_set_zero_flag(ctx, ctx->registers[vm_registers::A]);
+	vm_set_negative_flag(ctx, ctx->registers[vm_registers::A]);
 }
 
-// ------------------------------------------
-// INX
-// ------------------------------------------
+// ------------------------------------------------------------------------------------
+// INX  Adds one to the X register setting the zero and negative flags as appropriate.
+// ------------------------------------------------------------------------------------
 PRIVATE void vm_op_inx(vm_context* ctx, int data) {
-	ctx->registers[1] += 1;
-	vm_set_zero_flag(ctx, ctx->registers[1]);
-	vm_set_negative_flag(ctx, ctx->registers[1]);
+	ctx->registers[vm_registers::X] += 1;
+	vm_set_zero_flag(ctx, ctx->registers[vm_registers::X]);
+	vm_set_negative_flag(ctx, ctx->registers[vm_registers::X]);
 }
 
-// ------------------------------------------
-// INY
-// ------------------------------------------
+// ------------------------------------------------------------------------------------
+// INY  Adds one to the Y register setting the zero and negative flags as appropriate.
+// ------------------------------------------------------------------------------------
 PRIVATE void vm_op_iny(vm_context* ctx, int data) {
-	ctx->registers[2] += 1;
-	vm_set_zero_flag(ctx, ctx->registers[2]);
-	vm_set_negative_flag(ctx, ctx->registers[2]);
+	ctx->registers[vm_registers::Y] += 1;
+	vm_set_zero_flag(ctx, ctx->registers[vm_registers::Y]);
+	vm_set_negative_flag(ctx, ctx->registers[vm_registers::Y]);
 }
 
-// ------------------------------------------
-// INC
-// ------------------------------------------
+// ------------------------------------------------------------------------------------
+// INC  Adds one to the value held at a specified memory location setting 
+//		the zero and negative flags as appropriate.
+// ------------------------------------------------------------------------------------
 PRIVATE void vm_op_inc(vm_context* ctx, int data) {
 	int v = ctx->read(data) + 1;
 	ctx->write(data, v);
@@ -539,8 +556,8 @@ PRIVATE void adc(vm_context* ctx, int data) {
 	STA RESULTH
 
 	*/
-	ctx->registers[0] += data;
-	if (ctx->registers[0] == 0) {
+	ctx->registers[vm_registers::A] += data;
+	if (ctx->registers[vm_registers::A] == 0) {
 		ctx->setFlag(vm_flags::Z);
 	}
 	else {
@@ -554,13 +571,13 @@ PRIVATE void adc(vm_context* ctx, int data) {
 // CPX
 // ------------------------------------------
 PRIVATE void vm_op_cpx(vm_context* ctx, int data) {
-	if (ctx->registers[1] == data) {
+	if (ctx->registers[vm_registers::X] == data) {
 		ctx->setFlag(vm_flags::Z);
 	}
 	else {
 		ctx->clearFlag(vm_flags::Z);
 	}
-	if (ctx->registers[1] >= data) {
+	if (ctx->registers[vm_registers::X] >= data) {
 		ctx->setFlag(vm_flags::C);
 	}
 	else {
@@ -573,13 +590,13 @@ PRIVATE void vm_op_cpx(vm_context* ctx, int data) {
 // CPY
 // ------------------------------------------
 PRIVATE void vm_op_cpy(vm_context* ctx, int data) {
-	if (ctx->registers[2] == data) {
+	if (ctx->registers[vm_registers::Y] == data) {
 		ctx->setFlag(vm_flags::Z);
 	}
 	else {
 		ctx->clearFlag(vm_flags::Z);
 	}
-	if (ctx->registers[2] >= data) {
+	if (ctx->registers[vm_registers::Y] >= data) {
 		ctx->setFlag(vm_flags::C);
 	}
 	else {
@@ -588,38 +605,35 @@ PRIVATE void vm_op_cpy(vm_context* ctx, int data) {
 	// FIXME: negative flag handling
 }
 
-// ------------------------------------------
-// decrement
-// ------------------------------------------
-PRIVATE void vm_decrement(vm_context* ctx, int pc, int idx) {
-	--ctx->registers[idx];
-	if (ctx->registers[idx] < 0) {
-		ctx->registers[idx] = 255;
-	}
-	vm_set_zero_flag(ctx, ctx->registers[idx]);
-	vm_set_negative_flag(ctx, ctx->registers[idx]);
-}
-
-// ------------------------------------------
-// DEX
-// ------------------------------------------
+// ------------------------------------------------------------------------------------
+// DEX  Subtracts one from the X register setting the zero 
+//		and negative flags as appropriate.
+// ------------------------------------------------------------------------------------
 PRIVATE void vm_op_dex(vm_context* ctx, int data) {
-	vm_decrement(ctx, data, 1);
+	--ctx->registers[vm_registers::X];
+	vm_set_zero_flag(ctx, ctx->registers[vm_registers::X]);
+	vm_set_negative_flag(ctx, ctx->registers[vm_registers::X]);
 }
 
-// ------------------------------------------
-// DEY
-// ------------------------------------------
+// ------------------------------------------------------------------------------------
+// DEY  Subtracts one from the Y register setting the zero 
+//		and negative flags as appropriate.
+// ------------------------------------------------------------------------------------
 PRIVATE void vm_op_dey(vm_context* ctx, int pc) {
-	vm_decrement(ctx, pc, 2);
+	--ctx->registers[vm_registers::Y];
+	vm_set_zero_flag(ctx, ctx->registers[vm_registers::Y]);
+	vm_set_negative_flag(ctx, ctx->registers[vm_registers::Y]);
 }
 
-// ------------------------------------------
-// DEC
-// ------------------------------------------
-PRIVATE void vm_op_dec(vm_context* ctx, int pc) {
-	// FIXME: this is wrong
-	vm_decrement(ctx, pc, 0);
+// ------------------------------------------------------------------------------------
+// DEC  Subtracts one from the value held at a specified memory location 
+//		setting the zero and negative flags as appropriate.
+// ------------------------------------------------------------------------------------
+PRIVATE void vm_op_dec(vm_context* ctx, int data) {
+	int v = ctx->read(data) - 1;
+	ctx->write(data, v);
+	vm_set_zero_flag(ctx, v);
+	vm_set_negative_flag(ctx, v);
 }
 
 PRIVATE void brk(vm_context* ctx, int pc) {
@@ -753,14 +767,14 @@ PRIVATE void vm_op_clv(vm_context* ctx, int data) {
 // PHA
 // ------------------------------------------
 PRIVATE void vm_op_pha(vm_context* ctx, int data) {
-	ctx->push(ctx->registers[0]);
+	ctx->push(ctx->registers[vm_registers::A]);
 }
 
 // ------------------------------------------
 // PLA
 // ------------------------------------------
 PRIVATE void vm_op_pla(vm_context* ctx, int data) {
-	ctx->registers[0] = ctx->pop();
+	ctx->registers[vm_registers::A] = ctx->pop();
 }
 
 // ------------------------------------------
@@ -782,7 +796,7 @@ PRIVATE void vm_op_sed(vm_context* ctx, int data) {
 // ------------------------------------------
 PRIVATE void vm_op_bit(vm_context* ctx, int data) {
 	uint8_t v = ctx->read(data);
-	uint8_t a = ctx->registers[0];
+	uint8_t a = ctx->registers[vm_registers::A];
 	uint8_t r = v & a;
 	vm_set_zero_flag(ctx, r);
 	// V 	Overflow Flag 	Set to bit 6 of the memory value
@@ -794,7 +808,7 @@ PRIVATE void vm_op_bit(vm_context* ctx, int data) {
 // ------------------------------------------
 PRIVATE void vm_op_ora(vm_context* ctx, int data) {
 	uint8_t v = ctx->read(data);
-	uint8_t a = ctx->registers[0];
+	uint8_t a = ctx->registers[vm_registers::A];
 	uint8_t r = v | a;
 	vm_set_zero_flag(ctx, r);
 	vm_set_negative_flag(ctx, r);
@@ -805,7 +819,7 @@ PRIVATE void vm_op_ora(vm_context* ctx, int data) {
 // ------------------------------------------
 PRIVATE void vm_op_eor(vm_context* ctx, int data) {
 	uint8_t v = ctx->read(data);
-	uint8_t a = ctx->registers[0];
+	uint8_t a = ctx->registers[vm_registers::A];
 	uint8_t r = 0;
 	for (int i = 0; i < 8; ++i) {
 		uint8_t x = 1 << i;
@@ -846,42 +860,44 @@ PRIVATE void vm_op_rts(vm_context* ctx, int data) {
 // AND - A logical AND is performed, bit by bit, on the accumulator contents using the contents of a byte of memory.
 // ------------------------------------------------------------------------------------------------------------------------------
 PRIVATE void vm_op_and(vm_context* ctx, int data) {
-	int a = ctx->registers[0];
+	int a = ctx->registers[vm_registers::A];
 	int cmp = a & data;
 	vm_set_zero_flag(ctx, cmp);
 	vm_set_negative_flag(ctx, cmp);
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
-// PHP - Pushes a copy of the status flags on to the stack.
+// PHP  Pushes a copy of the status flags on to the stack.
 // ------------------------------------------------------------------------------------------------------------------------------
 PRIVATE void vm_op_php(vm_context* ctx, int data) {
 	ctx->push(ctx->flags);
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
-// ASL - This operation shifts all the bits of the accumulator or memory contents one bit left. Bit 0 is set to 0 and bit 7 is 
-// placed in the carry flag. The effect of this operation is to multiply the memory contents by 2 
-// (ignoring 2's complement considerations), setting the carry if the result will not fit in 8 bits.
+// ASL  This operation shifts all the bits of the accumulator or memory contents one bit left. Bit 0 is set to 0 and bit 7 is 
+//		placed in the carry flag. The effect of this operation is to multiply the memory contents by 2 
+//		(ignoring 2's complement considerations), setting the carry if the result will not fit in 8 bits.
 // ------------------------------------------------------------------------------------------------------------------------------
 PRIVATE void vm_op_asl(vm_context* ctx, int data) {
 	ctx->push(ctx->flags);
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
-// PLP - Pulls an 8 bit value from the stack and into the processor flags. The flags will take on new states as determined by the value pulled.
+// PLP  Pulls an 8 bit value from the stack and into the processor flags. 
+//		The flags will take on new states as determined by the value pulled.
 // ------------------------------------------------------------------------------------------------------------------------------
 PRIVATE void vm_op_plp(vm_context* ctx, int data) {
 	ctx->flags = ctx->pop();
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
-// LSR - Each of the bits in A or M is shift one place to the right. The bit that was in bit 0 is shifted into the carry flag. Bit 7 is set to zero.
+// LSR  Each of the bits in A or M is shift one place to the right. 
+//		The bit that was in bit 0 is shifted into the carry flag. Bit 7 is set to zero.
 // ------------------------------------------------------------------------------------------------------------------------------
 PRIVATE void vm_op_lsr(vm_context* ctx, int data) {
 	int v = 0;
 	if ( data == -1) {
-		v = ctx->registers[0];
+		v = ctx->registers[vm_registers::A];
 	}
 	else {
 		v = ctx->read(data);
@@ -898,7 +914,7 @@ PRIVATE void vm_op_lsr(vm_context* ctx, int data) {
 	}
 	int n = v >> 1;
 	if ( data == -1 ) {
-		ctx->registers[0] = n;
+		ctx->registers[vm_registers::A] = n;
 	}
 	else {
 		ctx->write(data,n);
@@ -906,13 +922,13 @@ PRIVATE void vm_op_lsr(vm_context* ctx, int data) {
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
-// ROL - Move each of the bits in either A or M one place to the left. Bit 0 is filled with the current 
-//       value of the carry flag whilst the old bit 7 becomes the new carry flag value.
+// ROL  Move each of the bits in either A or M one place to the left. Bit 0 is filled with the current 
+//      value of the carry flag whilst the old bit 7 becomes the new carry flag value.
 // ------------------------------------------------------------------------------------------------------------------------------
 PRIVATE void vm_op_rol(vm_context* ctx, int data) {
 	int v = 0;
 	if (data == -1) {
-		v = ctx->registers[0];
+		v = ctx->registers[vm_registers::A];
 	}
 	else {
 		v = ctx->read(data);
@@ -931,7 +947,7 @@ PRIVATE void vm_op_rol(vm_context* ctx, int data) {
 		ctx->clearFlag(vm_flags::C);
 	}
 	if (data == -1) {
-		ctx->registers[0] = n;
+		ctx->registers[vm_registers::A] = n;
 	}
 	else {
 		ctx->write(data, n);
@@ -939,13 +955,13 @@ PRIVATE void vm_op_rol(vm_context* ctx, int data) {
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
-// ROR - Move each of the bits in either A or M one place to the right. Bit 7 is filled with the current 
-//       value of the carry flag whilst the old bit 0 becomes the new carry flag value.
+// ROR  Move each of the bits in either A or M one place to the right. Bit 7 is filled with the current 
+//      value of the carry flag whilst the old bit 0 becomes the new carry flag value.
 // ------------------------------------------------------------------------------------------------------------------------------
 PRIVATE void vm_op_ror(vm_context* ctx, int data) {
 	int v = 0;
 	if (data == -1) {
-		v = ctx->registers[0];
+		v = ctx->registers[vm_registers::A];
 	}
 	else {
 		v = ctx->read(data);
@@ -964,7 +980,7 @@ PRIVATE void vm_op_ror(vm_context* ctx, int data) {
 		ctx->clearFlag(vm_flags::C);
 	}
 	if (data == -1) {
-		ctx->registers[0] = n;
+		ctx->registers[vm_registers::A] = n;
 	}
 	else {
 		ctx->write(data, n);
@@ -1768,9 +1784,9 @@ void vm_dump(int pc, int num) {
 void vm_dump_registers() {
 	if (_internal_ctx != nullptr) {
 		printf("------------- Dump -------------\n");
-		printf("A=$%02X ", _internal_ctx->registers[0]);
-		printf("X=$%02X ", _internal_ctx->registers[1]);
-		printf("Y=$%02X\n", _internal_ctx->registers[2]);
+		printf("A=$%02X ", _internal_ctx->registers[vm_registers::A]);
+		printf("X=$%02X ", _internal_ctx->registers[vm_registers::X]);
+		printf("Y=$%02X\n", _internal_ctx->registers[vm_registers::Y]);
 		printf("PC=$%04X ", _internal_ctx->programCounter);
 		printf("SP=$%02X\n", _internal_ctx->sp);
 		printf("CZIDBVN\n");
@@ -1802,6 +1818,9 @@ void vm_memory_dump(int pc, int num) {
 	}
 }
 
+// ---------------------------------------------------------
+// get current data based on addressing mode
+// ---------------------------------------------------------
 PRIVATE int get_data(vm_context* ctx, const vm_addressing_mode& mode) {
 	int data = 0;
 	if (mode == IMMEDIDATE) {
@@ -1813,24 +1832,24 @@ PRIVATE int get_data(vm_context* ctx, const vm_addressing_mode& mode) {
 	}
 	else if (mode == ABSOLUTE_X) {
 		uint8_t upper = ctx->read(ctx->programCounter + 2);
-		data = ctx->read(ctx->programCounter + 1) + (upper << 8) + ctx->registers[1];
+		data = ctx->read(ctx->programCounter + 1) + (upper << 8) + ctx->registers[vm_registers::X];
 	}
 	else if (mode == ABSOLUTE_Y) {
 		uint8_t upper = ctx->read(ctx->programCounter + 2);
-		data = ctx->read(ctx->programCounter + 1) + (upper << 8) + ctx->registers[2];
+		data = ctx->read(ctx->programCounter + 1) + (upper << 8) + ctx->registers[vm_registers::Y];
 	}
 	else if (mode == ZERO_PAGE) {
 		data = ctx->read(ctx->programCounter + 1);
 	}
 	else if (mode == ZERO_PAGE_X) {
-		int tmp = ctx->read(ctx->programCounter + 1) + ctx->registers[1];
+		int tmp = ctx->read(ctx->programCounter + 1) + ctx->registers[vm_registers::X];
 		if (tmp > 255) {
 			tmp = abs(256 - tmp);
 		}
 		data = tmp;
 	}
 	else if (mode == ZERO_PAGE_Y) {
-		int tmp = ctx->read(ctx->programCounter + 1) + ctx->registers[2];
+		int tmp = ctx->read(ctx->programCounter + 1) + ctx->registers[vm_registers::Y];
 		if (tmp > 255) {
 			tmp = abs(256 - tmp);
 		}
