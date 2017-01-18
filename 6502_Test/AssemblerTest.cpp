@@ -76,3 +76,11 @@ TEST_CASE("RUN_ASL", "[ASM]") {
 	REQUIRE(ctx->isSet(vm_flags::N) == true);
 	vm_release();
 }
+
+TEST_CASE("RUN_LDX", "[ASM]") {
+	vm_context* ctx = vm_create();
+	int num = vm_assemble("LDA #$30\nSTA $0201\nLDX $0201\nINX\nSTX $0203\n");
+	vm_run();
+	REQUIRE(49 == (int)ctx->registers[vm_registers::X]);
+	vm_release();
+}

@@ -218,11 +218,11 @@ void vm_disassemble();
 
 int vm_assemble(const char* code);
 
-void vm_dump(int pc, int num);
+void vm_dump(uint16_t pc, uint16_t num);
 
 void vm_dump_registers();
 
-void vm_memory_dump(int pc, int num);
+void vm_memory_dump(uint16_t pc, uint16_t num);
 
 bool vm_step();
 
@@ -271,7 +271,7 @@ PRIVATE bool vm_is_bit_set(uint8_t flags, uint8_t idx) {
 	return (flags & p) == p;
 }
 
-typedef void(*commandFunc)(vm_context* ctx, int data);
+typedef void(*commandFunc)(vm_context*, int, vm_addressing_mode);
 
 // -----------------------------------------------------
 // No logging log
@@ -403,47 +403,62 @@ PRIVATE void vm_set_overflow_flag(vm_context* ctx, int data) {
 // -----------------------------------------------------
 // Command function definitions
 // -----------------------------------------------------
-PRIVATE void vm_op_nop(vm_context* ctx, int pc) {
+PRIVATE void vm_op_nop(vm_context* ctx, int pc, vm_addressing_mode mode) {
 }
 
 // ------------------------------------------
 // LDA
 // ------------------------------------------
-PRIVATE void vm_op_lda(vm_context* ctx, int data) {
-	ctx->registers[vm_registers::A] = data;
-	vm_set_zero_flag(ctx, data);
-	vm_set_negative_flag(ctx, data);
+PRIVATE void vm_op_lda(vm_context* ctx, int data, vm_addressing_mode mode) {
+	if (mode == IMMEDIDATE) {
+		ctx->registers[vm_registers::A] = data;
+	}
+	else {
+		ctx->registers[vm_registers::A] = ctx->read(data);
+	}
+	vm_set_zero_flag(ctx, ctx->registers[vm_registers::A]);
+	vm_set_negative_flag(ctx, ctx->registers[vm_registers::A]);
 }
 
 // ------------------------------------------
 // LDX
 // ------------------------------------------
-PRIVATE void vm_op_ldx(vm_context* ctx, int data) {
-	ctx->registers[vm_registers::X] = data;
-	vm_set_zero_flag(ctx, data);
-	vm_set_negative_flag(ctx, data);
+PRIVATE void vm_op_ldx(vm_context* ctx, int data, vm_addressing_mode mode) {
+	if (mode == IMMEDIDATE) {
+		ctx->registers[vm_registers::X] = data;
+	}
+	else {
+		ctx->registers[vm_registers::X] = ctx->read(data);
+	}
+	vm_set_zero_flag(ctx, ctx->registers[vm_registers::X]);
+	vm_set_negative_flag(ctx, ctx->registers[vm_registers::X]);
 }
 
 // ------------------------------------------
 // LDY
 // ------------------------------------------
-PRIVATE void vm_op_ldy(vm_context* ctx, int data) {
-	ctx->registers[vm_registers::Y] = data;
-	vm_set_zero_flag(ctx, data);
-	vm_set_negative_flag(ctx, data);
+PRIVATE void vm_op_ldy(vm_context* ctx, int data, vm_addressing_mode mode) {
+	if (mode == IMMEDIDATE) {
+		ctx->registers[vm_registers::Y] = data;
+	}
+	else {
+		ctx->registers[vm_registers::Y] = ctx->read(data);
+	}
+	vm_set_zero_flag(ctx, ctx->registers[vm_registers::Y]);
+	vm_set_negative_flag(ctx, ctx->registers[vm_registers::Y]);
 }
 
 // ------------------------------------------
 // STX
 // ------------------------------------------
-PRIVATE void vm_op_stx(vm_context* ctx, int data) {
+PRIVATE void vm_op_stx(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->write(data, ctx->registers[vm_registers::X]);
 }
 
 // ------------------------------------------
 // STY
 // ------------------------------------------
-PRIVATE void vm_op_sty(vm_context* ctx, int data) {
+PRIVATE void vm_op_sty(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->write(data, ctx->registers[vm_registers::Y]);
 }
 
@@ -451,14 +466,14 @@ PRIVATE void vm_op_sty(vm_context* ctx, int data) {
 // ------------------------------------------
 // STA
 // ------------------------------------------
-PRIVATE void vm_op_sta(vm_context* ctx, int data) {
+PRIVATE void vm_op_sta(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->write(data, ctx->registers[vm_registers::A]);
 }
 
 // ------------------------------------------
 // TAX
 // ------------------------------------------
-PRIVATE void vm_op_tax(vm_context* ctx, int data) {
+PRIVATE void vm_op_tax(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->registers[vm_registers::X] = ctx->registers[vm_registers::A];
 	vm_set_zero_flag(ctx, ctx->registers[vm_registers::X]);
 	vm_set_negative_flag(ctx, ctx->registers[vm_registers::X]);
@@ -467,7 +482,7 @@ PRIVATE void vm_op_tax(vm_context* ctx, int data) {
 // ------------------------------------------
 // TAY
 // ------------------------------------------
-PRIVATE void vm_op_tay(vm_context* ctx, int data) {
+PRIVATE void vm_op_tay(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->registers[vm_registers::Y] = ctx->registers[vm_registers::A];
 	vm_set_zero_flag(ctx, ctx->registers[vm_registers::Y]);
 	vm_set_negative_flag(ctx, ctx->registers[vm_registers::Y]);
@@ -476,7 +491,7 @@ PRIVATE void vm_op_tay(vm_context* ctx, int data) {
 // ------------------------------------------
 // TYA
 // ------------------------------------------
-PRIVATE void vm_op_tya(vm_context* ctx, int data) {
+PRIVATE void vm_op_tya(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->registers[vm_registers::A] = ctx->registers[vm_registers::Y];
 	vm_set_zero_flag(ctx, ctx->registers[vm_registers::A]);
 	vm_set_negative_flag(ctx, ctx->registers[vm_registers::A]);
@@ -485,7 +500,7 @@ PRIVATE void vm_op_tya(vm_context* ctx, int data) {
 // ------------------------------------------
 // TXA
 // ------------------------------------------
-PRIVATE void vm_op_txa(vm_context* ctx, int data) {
+PRIVATE void vm_op_txa(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->registers[vm_registers::A] = ctx->registers[vm_registers::X];
 	vm_set_zero_flag(ctx, ctx->registers[vm_registers::A]);
 	vm_set_negative_flag(ctx, ctx->registers[vm_registers::A]);
@@ -494,7 +509,7 @@ PRIVATE void vm_op_txa(vm_context* ctx, int data) {
 // ------------------------------------------------------------------------------------
 // INX  Adds one to the X register setting the zero and negative flags as appropriate.
 // ------------------------------------------------------------------------------------
-PRIVATE void vm_op_inx(vm_context* ctx, int data) {
+PRIVATE void vm_op_inx(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->registers[vm_registers::X] += 1;
 	vm_set_zero_flag(ctx, ctx->registers[vm_registers::X]);
 	vm_set_negative_flag(ctx, ctx->registers[vm_registers::X]);
@@ -503,7 +518,7 @@ PRIVATE void vm_op_inx(vm_context* ctx, int data) {
 // ------------------------------------------------------------------------------------
 // INY  Adds one to the Y register setting the zero and negative flags as appropriate.
 // ------------------------------------------------------------------------------------
-PRIVATE void vm_op_iny(vm_context* ctx, int data) {
+PRIVATE void vm_op_iny(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->registers[vm_registers::Y] += 1;
 	vm_set_zero_flag(ctx, ctx->registers[vm_registers::Y]);
 	vm_set_negative_flag(ctx, ctx->registers[vm_registers::Y]);
@@ -513,7 +528,7 @@ PRIVATE void vm_op_iny(vm_context* ctx, int data) {
 // INC  Adds one to the value held at a specified memory location setting 
 //		the zero and negative flags as appropriate.
 // ------------------------------------------------------------------------------------
-PRIVATE void vm_op_inc(vm_context* ctx, int data) {
+PRIVATE void vm_op_inc(vm_context* ctx, int data, vm_addressing_mode mode) {
 	int v = ctx->read(data) + 1;
 	ctx->write(data, v);
 	vm_set_zero_flag(ctx, v);
@@ -523,7 +538,7 @@ PRIVATE void vm_op_inc(vm_context* ctx, int data) {
 // ------------------------------------------
 // ADC
 // ------------------------------------------
-PRIVATE void vm_op_adc(vm_context* ctx, int data) {
+PRIVATE void vm_op_adc(vm_context* ctx, int data, vm_addressing_mode mode) {
 	/*
 	Remember the two purposes of the carry flag? The first purpose was to allow addition and subtraction to be extended beyond 8 bits. The carry is still used for this purpose when adding or subtracting twos complement numbers. For example:
 
@@ -623,7 +638,7 @@ PRIVATE void vm_op_adc(vm_context* ctx, int data) {
 //		together with the not of the carry bit. If overflow occurs the carry bit is clear, 
 //		this enables multiple byte subtraction to be performed.
 // ------------------------------------------------------------------------------------
-PRIVATE void vm_op_sbc(vm_context* ctx, int data) {
+PRIVATE void vm_op_sbc(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (ctx->isSet(vm_flags::C)) {
 		--data;
 	}
@@ -639,7 +654,7 @@ PRIVATE void vm_op_sbc(vm_context* ctx, int data) {
 // ------------------------------------------
 // CPX
 // ------------------------------------------
-PRIVATE void vm_op_cpx(vm_context* ctx, int data) {
+PRIVATE void vm_op_cpx(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (ctx->registers[vm_registers::X] == data) {
 		ctx->setFlag(vm_flags::Z);
 	}
@@ -658,7 +673,7 @@ PRIVATE void vm_op_cpx(vm_context* ctx, int data) {
 // ------------------------------------------
 // CPY
 // ------------------------------------------
-PRIVATE void vm_op_cpy(vm_context* ctx, int data) {
+PRIVATE void vm_op_cpy(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (ctx->registers[vm_registers::Y] == data) {
 		ctx->setFlag(vm_flags::Z);
 	}
@@ -678,7 +693,7 @@ PRIVATE void vm_op_cpy(vm_context* ctx, int data) {
 // CMP  This instruction compares the contents of the accumulator with 
 //		another memory held value and sets the zero and carry flags as appropriate.
 // ------------------------------------------------------------------------------------
-PRIVATE void vm_op_cmp(vm_context* ctx, int data) {
+PRIVATE void vm_op_cmp(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (ctx->registers[vm_registers::A] == data) {
 		ctx->setFlag(vm_flags::Z);
 	}
@@ -697,7 +712,7 @@ PRIVATE void vm_op_cmp(vm_context* ctx, int data) {
 // DEX  Subtracts one from the X register setting the zero 
 //		and negative flags as appropriate.
 // ------------------------------------------------------------------------------------
-PRIVATE void vm_op_dex(vm_context* ctx, int data) {
+PRIVATE void vm_op_dex(vm_context* ctx, int data, vm_addressing_mode mode) {
 	--ctx->registers[vm_registers::X];
 	vm_set_zero_flag(ctx, ctx->registers[vm_registers::X]);
 	vm_set_negative_flag(ctx, ctx->registers[vm_registers::X]);
@@ -707,7 +722,7 @@ PRIVATE void vm_op_dex(vm_context* ctx, int data) {
 // DEY  Subtracts one from the Y register setting the zero 
 //		and negative flags as appropriate.
 // ------------------------------------------------------------------------------------
-PRIVATE void vm_op_dey(vm_context* ctx, int pc) {
+PRIVATE void vm_op_dey(vm_context* ctx, int pc, vm_addressing_mode mode) {
 	--ctx->registers[vm_registers::Y];
 	vm_set_zero_flag(ctx, ctx->registers[vm_registers::Y]);
 	vm_set_negative_flag(ctx, ctx->registers[vm_registers::Y]);
@@ -717,20 +732,20 @@ PRIVATE void vm_op_dey(vm_context* ctx, int pc) {
 // DEC  Subtracts one from the value held at a specified memory location 
 //		setting the zero and negative flags as appropriate.
 // ------------------------------------------------------------------------------------
-PRIVATE void vm_op_dec(vm_context* ctx, int data) {
+PRIVATE void vm_op_dec(vm_context* ctx, int data, vm_addressing_mode mode) {
 	int v = ctx->read(data) - 1;
 	ctx->write(data, v);
 	vm_set_zero_flag(ctx, v);
 	vm_set_negative_flag(ctx, v);
 }
 
-PRIVATE void brk(vm_context* ctx, int pc) {
+PRIVATE void brk(vm_context* ctx, int pc, vm_addressing_mode mode) {
 }
 
 // ------------------------------------------
 // BNE
 // ------------------------------------------
-PRIVATE void vm_op_bne(vm_context* ctx, int data) {
+PRIVATE void vm_op_bne(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (!ctx->isSet(vm_flags::Z)) {
 		vm_set_program_counter(ctx, data);
 	}
@@ -742,7 +757,7 @@ PRIVATE void vm_op_bne(vm_context* ctx, int data) {
 // ------------------------------------------
 // BEQ
 // ------------------------------------------
-PRIVATE void vm_op_beq(vm_context* ctx, int data) {
+PRIVATE void vm_op_beq(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (ctx->isSet(vm_flags::Z)) {
 		vm_set_program_counter(ctx, data);
 	}
@@ -754,7 +769,7 @@ PRIVATE void vm_op_beq(vm_context* ctx, int data) {
 // ------------------------------------------
 // BPL
 // ------------------------------------------
-PRIVATE void vm_op_bpl(vm_context* ctx, int data) {
+PRIVATE void vm_op_bpl(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (!ctx->isSet(vm_flags::N)) {
 		vm_set_program_counter(ctx, data);
 	}
@@ -766,7 +781,7 @@ PRIVATE void vm_op_bpl(vm_context* ctx, int data) {
 // ------------------------------------------
 // BVC
 // ------------------------------------------
-PRIVATE void vm_op_bvc(vm_context* ctx, int data) {
+PRIVATE void vm_op_bvc(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (!ctx->isSet(vm_flags::V)) {
 		vm_set_program_counter(ctx, data);
 	}
@@ -778,7 +793,7 @@ PRIVATE void vm_op_bvc(vm_context* ctx, int data) {
 // ------------------------------------------
 // BVS
 // ------------------------------------------
-PRIVATE void vm_op_bvs(vm_context* ctx, int data) {
+PRIVATE void vm_op_bvs(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (ctx->isSet(vm_flags::V)) {
 		vm_set_program_counter(ctx, data);
 	}
@@ -790,7 +805,7 @@ PRIVATE void vm_op_bvs(vm_context* ctx, int data) {
 // ------------------------------------------
 // BCC
 // ------------------------------------------
-PRIVATE void vm_op_bcc(vm_context* ctx, int data) {
+PRIVATE void vm_op_bcc(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (!ctx->isSet(vm_flags::C)) {
 		vm_set_program_counter(ctx, data);
 	}
@@ -802,7 +817,7 @@ PRIVATE void vm_op_bcc(vm_context* ctx, int data) {
 // ------------------------------------------
 // BCS
 // ------------------------------------------
-PRIVATE void vm_op_bcs(vm_context* ctx, int data) {
+PRIVATE void vm_op_bcs(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (ctx->isSet(vm_flags::C)) {
 		vm_set_program_counter(ctx, data);
 	}
@@ -814,7 +829,7 @@ PRIVATE void vm_op_bcs(vm_context* ctx, int data) {
 // ------------------------------------------
 // BMI
 // ------------------------------------------
-PRIVATE void vm_op_bmi(vm_context* ctx, int data) {
+PRIVATE void vm_op_bmi(vm_context* ctx, int data, vm_addressing_mode mode) {
 	if (ctx->isSet(vm_flags::N)) {
 		vm_set_program_counter(ctx, data);
 	}
@@ -826,63 +841,63 @@ PRIVATE void vm_op_bmi(vm_context* ctx, int data) {
 // ------------------------------------------
 // CLC
 // ------------------------------------------
-PRIVATE void vm_op_clc(vm_context* ctx, int data) {
+PRIVATE void vm_op_clc(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->clearFlag(vm_flags::C);
 }
 
 // ------------------------------------------
 // CLD
 // ------------------------------------------
-PRIVATE void vm_op_cld(vm_context* ctx, int data) {
+PRIVATE void vm_op_cld(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->clearFlag(vm_flags::D);
 }
 
 // ------------------------------------------
 // CLI
 // ------------------------------------------
-PRIVATE void vm_op_cli(vm_context* ctx, int data) {
+PRIVATE void vm_op_cli(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->clearFlag(vm_flags::I);
 }
 
 // ------------------------------------------
 // CLV
 // ------------------------------------------
-PRIVATE void vm_op_clv(vm_context* ctx, int data) {
+PRIVATE void vm_op_clv(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->clearFlag(vm_flags::V);
 }
 
 // ------------------------------------------
 // PHA
 // ------------------------------------------
-PRIVATE void vm_op_pha(vm_context* ctx, int data) {
+PRIVATE void vm_op_pha(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->push(ctx->registers[vm_registers::A]);
 }
 
 // ------------------------------------------
 // PLA
 // ------------------------------------------
-PRIVATE void vm_op_pla(vm_context* ctx, int data) {
+PRIVATE void vm_op_pla(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->registers[vm_registers::A] = ctx->pop();
 }
 
 // ------------------------------------------
 // SEC
 // ------------------------------------------
-PRIVATE void vm_op_sec(vm_context* ctx, int data) {
+PRIVATE void vm_op_sec(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->setFlag(vm_flags::C);
 }
 
 // ------------------------------------------
 // SED
 // ------------------------------------------
-PRIVATE void vm_op_sed(vm_context* ctx, int data) {
+PRIVATE void vm_op_sed(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->setFlag(vm_flags::D);
 }
 
 // ------------------------------------------
 // BIT
 // ------------------------------------------
-PRIVATE void vm_op_bit(vm_context* ctx, int data) {
+PRIVATE void vm_op_bit(vm_context* ctx, int data, vm_addressing_mode mode) {
 	uint8_t v = ctx->read(data);
 	uint8_t a = ctx->registers[vm_registers::A];
 	uint8_t r = v & a;
@@ -894,7 +909,7 @@ PRIVATE void vm_op_bit(vm_context* ctx, int data) {
 // ------------------------------------------
 // ORA
 // ------------------------------------------
-PRIVATE void vm_op_ora(vm_context* ctx, int data) {
+PRIVATE void vm_op_ora(vm_context* ctx, int data, vm_addressing_mode mode) {
 	uint8_t v = ctx->read(data);
 	uint8_t a = ctx->registers[vm_registers::A];
 	uint8_t r = v | a;
@@ -905,7 +920,7 @@ PRIVATE void vm_op_ora(vm_context* ctx, int data) {
 // ------------------------------------------
 // EOR
 // ------------------------------------------
-PRIVATE void vm_op_eor(vm_context* ctx, int data) {
+PRIVATE void vm_op_eor(vm_context* ctx, int data, vm_addressing_mode mode) {
 	uint8_t v = ctx->read(data);
 	uint8_t a = ctx->registers[vm_registers::A];
 	uint8_t r = 0;
@@ -922,14 +937,14 @@ PRIVATE void vm_op_eor(vm_context* ctx, int data) {
 // ------------------------------------------
 // JMP
 // ------------------------------------------
-PRIVATE void vm_op_jmp(vm_context* ctx, int data) {
+PRIVATE void vm_op_jmp(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->programCounter = data;
 }
 
 // ------------------------------------------
 // JSR
 // ------------------------------------------
-PRIVATE void vm_op_jsr(vm_context* ctx, int data) {
+PRIVATE void vm_op_jsr(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->push(high_value(ctx->programCounter));
 	ctx->push(low_value(ctx->programCounter));
 	ctx->programCounter = data;
@@ -938,7 +953,7 @@ PRIVATE void vm_op_jsr(vm_context* ctx, int data) {
 // ------------------------------------------
 // RTS
 // ------------------------------------------
-PRIVATE void vm_op_rts(vm_context* ctx, int data) {
+PRIVATE void vm_op_rts(vm_context* ctx, int data, vm_addressing_mode mode) {
 	uint8_t low = ctx->pop();
 	uint8_t high = ctx->pop();
 	ctx->programCounter = low + (high << 8);
@@ -947,7 +962,7 @@ PRIVATE void vm_op_rts(vm_context* ctx, int data) {
 // ------------------------------------------------------------------------------------------------------------------------------
 // AND - A logical AND is performed, bit by bit, on the accumulator contents using the contents of a byte of memory.
 // ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_and(vm_context* ctx, int data) {
+PRIVATE void vm_op_and(vm_context* ctx, int data, vm_addressing_mode mode) {
 	int a = ctx->registers[vm_registers::A];
 	int cmp = a & data;
 	vm_set_zero_flag(ctx, cmp);
@@ -957,7 +972,7 @@ PRIVATE void vm_op_and(vm_context* ctx, int data) {
 // ------------------------------------------------------------------------------------------------------------------------------
 // PHP  Pushes a copy of the status flags on to the stack.
 // ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_php(vm_context* ctx, int data) {
+PRIVATE void vm_op_php(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->push(ctx->flags);
 }
 
@@ -965,7 +980,7 @@ PRIVATE void vm_op_php(vm_context* ctx, int data) {
 // PLP  Pulls an 8 bit value from the stack and into the processor flags. 
 //		The flags will take on new states as determined by the value pulled.
 // ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_plp(vm_context* ctx, int data) {
+PRIVATE void vm_op_plp(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->flags = ctx->pop();
 }
 
@@ -973,7 +988,7 @@ PRIVATE void vm_op_plp(vm_context* ctx, int data) {
 // LSR  Each of the bits in A or M is shift one place to the right. 
 //		The bit that was in bit 0 is shifted into the carry flag. Bit 7 is set to zero.
 // ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_lsr(vm_context* ctx, int data) {
+PRIVATE void vm_op_lsr(vm_context* ctx, int data, vm_addressing_mode mode) {
 	int v = 0;
 	if ( data == -1) {
 		v = ctx->registers[vm_registers::A];
@@ -1005,7 +1020,7 @@ PRIVATE void vm_op_lsr(vm_context* ctx, int data) {
 //		placed in the carry flag. The effect of this operation is to multiply the memory contents by 2 
 //		(ignoring 2's complement considerations), setting the carry if the result will not fit in 8 bits.
 // ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_asl(vm_context* ctx, int data) {
+PRIVATE void vm_op_asl(vm_context* ctx, int data, vm_addressing_mode mode) {
 	int v = 0;
 	if (data == -1) {
 		v = ctx->registers[vm_registers::A];
@@ -1033,7 +1048,7 @@ PRIVATE void vm_op_asl(vm_context* ctx, int data) {
 // ROL  Move each of the bits in either A or M one place to the left. Bit 0 is filled with the current 
 //      value of the carry flag whilst the old bit 7 becomes the new carry flag value.
 // ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_rol(vm_context* ctx, int data) {
+PRIVATE void vm_op_rol(vm_context* ctx, int data, vm_addressing_mode mode) {
 	int v = 0;
 	if (data == -1) {
 		v = ctx->registers[vm_registers::A];
@@ -1066,7 +1081,7 @@ PRIVATE void vm_op_rol(vm_context* ctx, int data) {
 // ROR  Move each of the bits in either A or M one place to the right. Bit 7 is filled with the current 
 //      value of the carry flag whilst the old bit 0 becomes the new carry flag value.
 // ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_ror(vm_context* ctx, int data) {
+PRIVATE void vm_op_ror(vm_context* ctx, int data, vm_addressing_mode mode) {
 	int v = 0;
 	if (data == -1) {
 		v = ctx->registers[vm_registers::A];
@@ -1100,21 +1115,21 @@ PRIVATE void vm_op_ror(vm_context* ctx, int data) {
 // ------------------------------------------------------------------------------------------------------------------------------
 // SEI - Set the interrupt disable flag to one.
 // ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_sei(vm_context* ctx, int data) {
+PRIVATE void vm_op_sei(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->setFlag(vm_flags::I);
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
 // TXS  Copies the current contents of the X register into the stack register.
 // ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_txs(vm_context* ctx, int data) {
+PRIVATE void vm_op_txs(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->sp = ctx->registers[vm_registers::X];
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
 // TSX  Copies the current contents of the stack register into the X register and sets the zero and negative flags as appropriate.
 // ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_tsx(vm_context* ctx, int data) {
+PRIVATE void vm_op_tsx(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->registers[vm_registers::X] = ctx->sp;
 }
 
@@ -1122,12 +1137,12 @@ PRIVATE void vm_op_tsx(vm_context* ctx, int data) {
 // RTI  The RTI instruction is used at the end of an interrupt processing routine. 
 //		It pulls the processor flags from the stack followed by the program counter.
 // ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_rti(vm_context* ctx, int data) {
+PRIVATE void vm_op_rti(vm_context* ctx, int data, vm_addressing_mode mode) {
 	ctx->flags = ctx->pop();
 	// FIXME: correct order???
 	uint8_t low = ctx->pop();
 	uint8_t high = ctx->pop();
-	ctx->programCounter = low + high << 8;
+	ctx->programCounter = low + (high << 8);
 }
 // -----------------------------------------------------
 // Command
@@ -1718,7 +1733,7 @@ PRIVATE const char* translate_addressing_mode(vm_addressing_mode mode) {
 // -----------------------------------------------------------------
 // get addressing mode 
 // -----------------------------------------------------------------
-PRIVATE vm_addressing_mode get_addressing_mode(const Tokenizer & tokenizer, int pos) {
+PRIVATE vm_addressing_mode get_addressing_mode(const Tokenizer & tokenizer, uint16_t pos) {
 	const vm_token& command = tokenizer.get(pos);
 	if (command.type == vm_token::COMMAND) {
 		const vm_token& next = tokenizer.get(pos + 1);
@@ -1935,7 +1950,7 @@ int vm_assemble(const char* code) {
 // -------------------------------------------------------- -
 //  dump registers and memory
 // ---------------------------------------------------------
-void vm_dump(int pc, int num) {
+void vm_dump(uint16_t pc, uint16_t num) {
 	vm_dump_registers();
 	vm_memory_dump(pc, num);
 }
@@ -1967,7 +1982,7 @@ void vm_dump_registers() {
 // ---------------------------------------------------------
 //  memory dump
 // ---------------------------------------------------------
-void vm_memory_dump(int pc, int num) {
+void vm_memory_dump(uint16_t pc, uint16_t num) {
 	if (_internal_ctx != nullptr) {
 		printf("---------- Memory dump -----------");
 		for (size_t i = 0; i < num; ++i) {
@@ -2043,8 +2058,8 @@ PRIVATE bool vm_step() {
 		vm_addressing_mode mode = mapping.mode;
 		int data = get_data(_internal_ctx, mode);
 		int add = VM_DATA_SIZE[mode] + 1;
-		(*cmd.function)(_internal_ctx, data);
-		printf("%04X %s (%02X) data: %04X add: %d\n", _internal_ctx->programCounter, cmd.name, cmdIdx, data, add);
+		(*cmd.function)(_internal_ctx, data, mode);
+		printf("%04X %s (%02X) data: %04X mode: %s add: %d\n", _internal_ctx->programCounter, cmd.name, cmdIdx, data, translate_addressing_mode(mode),add);
 		if (!cmd.modifyPC) {
 			_internal_ctx->programCounter += add;
 		}
