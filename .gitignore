@@ -9,3 +9,9 @@ shell/vs_2013/shell.opensdf
 6502_Test/Debug/
 6502_Test/6502_Test.opensdf
 6502_Test/6502_Test.sdf
+6502_Test/6502_Test.VC.db
+6502.VC.db
+6502_Test/6502_Test.VC.VC.opendb
+AC64/AC64.VC.db
+AC64/AC64.VC.VC.opendb
+UnitTests/6502_Test.VC.db
