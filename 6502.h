@@ -126,6 +126,7 @@ typedef enum vm_registers {
 	A, X, Y
 } vm_registers;
 
+//  	N 	V 	- 	B 	D 	I 	Z 	C 	P Processor flags
 // -----------------------------------------------------
 // Flags
 // -----------------------------------------------------
@@ -147,7 +148,7 @@ typedef void(*vm_LogFunc)(const char* message);
 // -----------------------------------------------------
 typedef struct vm_context {
 
-	int registers[3];
+	uint8_t registers[3];
 	uint8_t a, x, y;
 	uint16_t programCounter;
 	uint8_t mem[65536];
@@ -236,7 +237,39 @@ void vm_run();
 
 static vm_context* _internal_ctx = nullptr;
 
+PRIVATE void vm_set_bit(uint8_t* v, uint8_t idx) {
+	*v |= 1 << idx;
+}
 
+PRIVATE void vm_set_bit(int* v, uint8_t idx) {
+	*v |= 1 << idx;
+}
+
+
+PRIVATE uint8_t vm_set_bit(uint8_t v, uint8_t idx) {
+	uint8_t r = v;
+	r |= 1 << idx;
+	return r;
+}
+
+PRIVATE uint8_t vm_clear_bit(uint8_t v, uint8_t idx) {
+	uint8_t r = v;
+	r &= ~(1 << idx);
+	return r;
+}
+
+PRIVATE void vm_clear_bit(uint8_t* v, uint8_t idx) {
+	*v &= ~(1 << idx);
+}
+
+PRIVATE void vm_clear_bit(int* v, uint8_t idx) {
+	*v &= ~(1 << idx);
+}
+
+PRIVATE bool vm_is_bit_set(uint8_t flags, uint8_t idx) {
+	int p = 1 << idx;
+	return (flags & p) == p;
+}
 
 typedef void(*commandFunc)(vm_context* ctx, int data);
 
@@ -348,6 +381,23 @@ PRIVATE void vm_set_negative_flag(vm_context* ctx, int data) {
 	}
 	else {
 		ctx->clearFlag(vm_flags::N);
+	}
+}
+
+// -----------------------------------------------------
+// set overflow flag
+// -----------------------------------------------------
+PRIVATE void vm_set_overflow_flag(vm_context* ctx, int data) {
+	// V indicates whether the result of an addition or subraction is outside the range -128 to 127, i.e. whether there is a twos complement overflow.
+	int c = data;
+	if (c > 255) {
+		c = 256 - c;
+	}
+	if (c <= -128 || c >= 127 ) {
+		ctx->setFlag(vm_flags::V);
+	}
+	else {
+		ctx->clearFlag(vm_flags::V);
 	}
 }
 // -----------------------------------------------------
@@ -473,7 +523,7 @@ PRIVATE void vm_op_inc(vm_context* ctx, int data) {
 // ------------------------------------------
 // ADC
 // ------------------------------------------
-PRIVATE void adc(vm_context* ctx, int data) {
+PRIVATE void vm_op_adc(vm_context* ctx, int data) {
 	/*
 	Remember the two purposes of the carry flag? The first purpose was to allow addition and subtraction to be extended beyond 8 bits. The carry is still used for this purpose when adding or subtracting twos complement numbers. For example:
 
@@ -556,16 +606,35 @@ PRIVATE void adc(vm_context* ctx, int data) {
 	STA RESULTH
 
 	*/
-	ctx->registers[vm_registers::A] += data;
-	if (ctx->registers[vm_registers::A] == 0) {
-		ctx->setFlag(vm_flags::Z);
+	if (ctx->isSet(vm_flags::C)) {
+		++data;
 	}
-	else {
-		ctx->clearFlag(vm_flags::Z);
+	int tmp = ctx->registers[vm_registers::A] + data;
+	if (tmp > 255) {
+		ctx->setFlag(vm_flags::C);
 	}
+	ctx->registers[vm_registers::A] = (tmp & 0xFF);
+	vm_set_zero_flag(ctx, tmp);
+	vm_set_overflow_flag(ctx, tmp);
 }
 
-
+// ------------------------------------------------------------------------------------
+// SBC  This instruction subtracts the contents of a memory location to the accumulator 
+//		together with the not of the carry bit. If overflow occurs the carry bit is clear, 
+//		this enables multiple byte subtraction to be performed.
+// ------------------------------------------------------------------------------------
+PRIVATE void vm_op_sbc(vm_context* ctx, int data) {
+	if (ctx->isSet(vm_flags::C)) {
+		--data;
+	}
+	int tmp = ctx->registers[vm_registers::A] - data;
+	if (tmp > 255) {
+		ctx->setFlag(vm_flags::C);
+	}
+	ctx->registers[vm_registers::A] = (tmp & 0xFF);
+	vm_set_zero_flag(ctx, tmp);
+	vm_set_overflow_flag(ctx, tmp);
+}
 
 // ------------------------------------------
 // CPX
@@ -605,6 +674,25 @@ PRIVATE void vm_op_cpy(vm_context* ctx, int data) {
 	// FIXME: negative flag handling
 }
 
+// ------------------------------------------------------------------------------------
+// CMP  This instruction compares the contents of the accumulator with 
+//		another memory held value and sets the zero and carry flags as appropriate.
+// ------------------------------------------------------------------------------------
+PRIVATE void vm_op_cmp(vm_context* ctx, int data) {
+	if (ctx->registers[vm_registers::A] == data) {
+		ctx->setFlag(vm_flags::Z);
+	}
+	else {
+		ctx->clearFlag(vm_flags::Z);
+	}
+	if (ctx->registers[vm_registers::A] >= data) {
+		ctx->setFlag(vm_flags::C);
+	}
+	else {
+		ctx->clearFlag(vm_flags::C);
+	}
+	// FIXME: negative flag handling
+}
 // ------------------------------------------------------------------------------------
 // DEX  Subtracts one from the X register setting the zero 
 //		and negative flags as appropriate.
@@ -874,15 +962,6 @@ PRIVATE void vm_op_php(vm_context* ctx, int data) {
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
-// ASL  This operation shifts all the bits of the accumulator or memory contents one bit left. Bit 0 is set to 0 and bit 7 is 
-//		placed in the carry flag. The effect of this operation is to multiply the memory contents by 2 
-//		(ignoring 2's complement considerations), setting the carry if the result will not fit in 8 bits.
-// ------------------------------------------------------------------------------------------------------------------------------
-PRIVATE void vm_op_asl(vm_context* ctx, int data) {
-	ctx->push(ctx->flags);
-}
-
-// ------------------------------------------------------------------------------------------------------------------------------
 // PLP  Pulls an 8 bit value from the stack and into the processor flags. 
 //		The flags will take on new states as determined by the value pulled.
 // ------------------------------------------------------------------------------------------------------------------------------
@@ -919,6 +998,35 @@ PRIVATE void vm_op_lsr(vm_context* ctx, int data) {
 	else {
 		ctx->write(data,n);
 	}
+}
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// ASL  This operation shifts all the bits of the accumulator or memory contents one bit left. Bit 0 is set to 0 and bit 7 is 
+//		placed in the carry flag. The effect of this operation is to multiply the memory contents by 2 
+//		(ignoring 2's complement considerations), setting the carry if the result will not fit in 8 bits.
+// ------------------------------------------------------------------------------------------------------------------------------
+PRIVATE void vm_op_asl(vm_context* ctx, int data) {
+	int v = 0;
+	if (data == -1) {
+		v = ctx->registers[vm_registers::A];
+	}
+	else {
+		v = ctx->read(data);
+	}
+	if (vm_is_bit_set(v,7)) {
+		ctx->setFlag(vm_flags::C);
+	}
+	else {
+		ctx->clearFlag(vm_flags::C);
+	}
+	int n = v << 1;
+	if (data == -1) {
+		ctx->registers[vm_registers::A] = n;
+	}
+	else {
+		ctx->write(data, n);
+	}
+	vm_set_negative_flag(ctx, n);
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
@@ -968,10 +1076,12 @@ PRIVATE void vm_op_ror(vm_context* ctx, int data) {
 	}
 	int n = v << 1;
 	if (ctx->isSet(vm_flags::C)) {
-		n |= 128;
+		vm_set_bit(&n, 7);
+		//n |= 128;
 	}
 	else {
-		n &= ~128;
+		vm_clear_bit(&n, 7);
+		//n &= ~128;
 	}
 	if ((v & 1) == 1) {
 		ctx->setFlag(vm_flags::C);
@@ -994,6 +1104,31 @@ PRIVATE void vm_op_sei(vm_context* ctx, int data) {
 	ctx->setFlag(vm_flags::I);
 }
 
+// ------------------------------------------------------------------------------------------------------------------------------
+// TXS  Copies the current contents of the X register into the stack register.
+// ------------------------------------------------------------------------------------------------------------------------------
+PRIVATE void vm_op_txs(vm_context* ctx, int data) {
+	ctx->sp = ctx->registers[vm_registers::X];
+}
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// TSX  Copies the current contents of the stack register into the X register and sets the zero and negative flags as appropriate.
+// ------------------------------------------------------------------------------------------------------------------------------
+PRIVATE void vm_op_tsx(vm_context* ctx, int data) {
+	ctx->registers[vm_registers::X] = ctx->sp;
+}
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// RTI  The RTI instruction is used at the end of an interrupt processing routine. 
+//		It pulls the processor flags from the stack followed by the program counter.
+// ------------------------------------------------------------------------------------------------------------------------------
+PRIVATE void vm_op_rti(vm_context* ctx, int data) {
+	ctx->flags = ctx->pop();
+	// FIXME: correct order???
+	uint8_t low = ctx->pop();
+	uint8_t high = ctx->pop();
+	ctx->programCounter = low + high << 8;
+}
 // -----------------------------------------------------
 // Command
 // -----------------------------------------------------
@@ -1008,15 +1143,15 @@ typedef struct vm_command {
 	}
 } vm_command;
 
-// ADC ASL CMP RTI SBC TSX TXS
+// TODO: missing commands: RTI 
 // -----------------------------------------------------
 // Array of all supported commands with function pointer
 // and a bitset of supported addressing modes
 // -----------------------------------------------------
 const static vm_command VM_COMMANDS[] = {
-	{ "ADC", false, &adc, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
+	{ "ADC", false, &vm_op_adc, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
 	{ "AND", false, &vm_op_and, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
-	{ "ASL", false, &vm_op_nop, 0 },
+	{ "ASL", false, &vm_op_asl, 1 << ACCUMULATOR | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
 	{ "BCC", true , &vm_op_bcc, 1 << RELATIVE_ADR },
 	{ "BCS", true , &vm_op_bcs, 1 << RELATIVE_ADR },
 	{ "BEQ", true , &vm_op_beq, 1 << RELATIVE_ADR },
@@ -1031,7 +1166,7 @@ const static vm_command VM_COMMANDS[] = {
 	{ "CLD", false, &vm_op_cld, 0 },
 	{ "CLI", false, &vm_op_cli, 0 },
 	{ "CLV", false, &vm_op_clv, 0 },
-	{ "CMP", false, &vm_op_nop, 0 },
+	{ "CMP", false, &vm_op_cmp, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
 	{ "CPX", false, &vm_op_cpx, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ABSOLUTE_ADR },
 	{ "CPY", false, &vm_op_cpy, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ABSOLUTE_ADR },
 	{ "DEC", false, &vm_op_dec, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
@@ -1055,9 +1190,9 @@ const static vm_command VM_COMMANDS[] = {
 	{ "PLP", false, &vm_op_plp, 0 },
 	{ "ROL", false, &vm_op_rol, 1 << ACCUMULATOR | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
 	{ "ROR", false, &vm_op_ror, 1 << ACCUMULATOR | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X },
-	{ "RTI", false, &vm_op_nop, 0 },
+	{ "RTI", false, &vm_op_rti, 0 },
 	{ "RTS", true , &vm_op_rts, 0 },
-	{ "SBC", false, &vm_op_nop, 0 },
+	{ "SBC", false, &vm_op_sbc, 1 << IMMEDIDATE | 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR | 1 << ABSOLUTE_X | 1 << ABSOLUTE_Y | 1 << INDIRECT_X | 1 << INDIRECT_Y },
 	{ "SEC", false, &vm_op_sec, 0 },
 	{ "SED", false, &vm_op_sed, 0 },
 	{ "SEI", false, &vm_op_sei, 0 },
@@ -1066,9 +1201,9 @@ const static vm_command VM_COMMANDS[] = {
 	{ "STY", false, &vm_op_sty, 1 << ZERO_PAGE | 1 << ZERO_PAGE_X | 1 << ABSOLUTE_ADR },
 	{ "TAX", false, &vm_op_tax, 0 },
 	{ "TAY", false, &vm_op_tay, 0 },
-	{ "TSX", false, &vm_op_nop, 0 },
+	{ "TSX", false, &vm_op_tsx, 0 },
 	{ "TXA", false, &vm_op_txa, 0 },
-	{ "TXS", false, &vm_op_nop, 0 },
+	{ "TXS", false, &vm_op_txs, 0 },
 	{ "TYA", false, &vm_op_tya, 0 }
 };
 
@@ -1118,7 +1253,6 @@ const static vm_command_mapping NO_OP = vm_command_mapping{ EOL, NONE, 0xFF };
 // Array of all comand mappings
 // -----------------------------------------------------
 const static vm_command_mapping VM_COMMAND_MAPPING[] = {
-	// ADC
 	{ ADC, IMMEDIDATE,   0x69 },
 	{ ADC, ZERO_PAGE,    0x65 },
 	{ ADC, ZERO_PAGE_X,  0x75 },
@@ -1127,6 +1261,11 @@ const static vm_command_mapping VM_COMMAND_MAPPING[] = {
 	{ ADC, ABSOLUTE_Y,   0x79 },
 	{ ADC, INDIRECT_X,   0x61 },
 	{ ADC, INDIRECT_Y,   0x71 },
+	{ ASL, ACCUMULATOR,  0x0A },
+	{ ASL, ZERO_PAGE,    0x06 },
+	{ ASL, ZERO_PAGE_X,  0x16 },
+	{ ASL, ABSOLUTE_ADR, 0x0E },
+	{ ASL, ABSOLUTE_X,   0x1E },
 	{ AND, IMMEDIDATE,   0x29 },
 	{ AND, ZERO_PAGE,    0x25 },
 	{ AND, ZERO_PAGE_X,  0x35 },
@@ -1148,6 +1287,14 @@ const static vm_command_mapping VM_COMMAND_MAPPING[] = {
 	{ CLD, NONE,         0xD8 },
 	{ CLI, NONE,         0x58 },
 	{ CLV, NONE,         0xB8 },
+	{ CMP, IMMEDIDATE,   0xC9 },
+	{ CMP, ZERO_PAGE,    0xC5 },
+	{ CMP, ZERO_PAGE_X,  0xD5 },
+	{ CMP, ABSOLUTE_ADR, 0xCD },
+	{ CMP, ABSOLUTE_X,   0xDD },
+	{ CMP, ABSOLUTE_Y,   0xD9 },
+	{ CMP, INDIRECT_X,   0xC1 },
+	{ CMP, INDIRECT_Y,   0xD1 },
 	{ CPX, IMMEDIDATE,   0xE0 },
 	{ CPX, ZERO_PAGE,    0xE4 },
 	{ CPX, ABSOLUTE_ADR, 0xEC },
@@ -1222,7 +1369,16 @@ const static vm_command_mapping VM_COMMAND_MAPPING[] = {
 	{ ROR, ZERO_PAGE_X,  0x76 },
 	{ ROR, ABSOLUTE_ADR, 0x6E },
 	{ ROR, ABSOLUTE_X,   0x7E },
+	{ RTI, NONE,         0x40 },
 	{ RTS, NONE,         0x60 },
+	{ SBC, IMMEDIDATE,   0xE9 },
+	{ SBC, ZERO_PAGE,    0xE5 },
+	{ SBC, ZERO_PAGE_X,  0xF5 },
+	{ SBC, ABSOLUTE_ADR, 0xED },
+	{ SBC, ABSOLUTE_X,   0xFD },
+	{ SBC, ABSOLUTE_Y,   0xF9 },
+	{ SBC, INDIRECT_X,   0xE1 },
+	{ SBC, INDIRECT_Y,   0xF1 },
 	{ SEC, NONE,         0x38 },
 	{ SED, NONE,         0xF8 },
 	{ SEI, NONE,         0x78 },
@@ -1406,7 +1562,13 @@ public:
 					token = vm_token(vm_token::COMMAND, cmdIdx);
 				}
 				else {
-					token.hash = fnv1a(identifier, p - identifier);
+					int l = p - identifier;
+					if (strncmp("A", identifier, l) == 0) {
+						token = vm_token(vm_token::ACCUMULATOR);
+					}
+					else {
+						token.hash = fnv1a(identifier, p - identifier);
+					}
 				}
 			}
 			else if (isHex(*p)) {
@@ -1648,9 +1810,9 @@ typedef struct vm_label_definition {
 // -----------------------------------------------------------------
 // convert tokens 
 // -----------------------------------------------------------------
-PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, int* numCommands) {
+PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, uint16_t* numCommands) {
 	vm_log("tokens: %d", tokenizer.num());
-	int pc = 0x600;
+	uint16_t pc = 0x600;
 	std::vector<vm_label_definition> definitions;
 	std::vector<vm_label_definition> branches;
 	for (size_t i = 0; i < tokenizer.num(); ++i) {

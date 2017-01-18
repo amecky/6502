@@ -33,3 +33,46 @@ TEST_CASE("AssembleJMP", "[ASM]") {
 	}
 	vm_release();
 }
+
+TEST_CASE("RUN_ADC", "[ASM]") {
+	vm_context* ctx = vm_create();
+	int num = vm_assemble("CLC\nLDA #$01\nADC #$01\n");
+	vm_run();
+	REQUIRE(2 == ctx->registers[vm_registers::A]);
+	REQUIRE(ctx->isSet(vm_flags::C) == false);
+	REQUIRE(ctx->isSet(vm_flags::V) == false);
+	num = vm_assemble("CLC\nLDA #$01\nADC #$FF\n");
+	vm_run();
+	REQUIRE(0 == ctx->registers[vm_registers::A]);
+	REQUIRE(ctx->isSet(vm_flags::C) == true);
+	REQUIRE(ctx->isSet(vm_flags::V) == false);
+	num = vm_assemble("CLC\nLDA #$7F\nADC #$01\n");
+	vm_run();
+	REQUIRE(128 == ctx->registers[vm_registers::A]);
+	REQUIRE(ctx->isSet(vm_flags::C) == false);
+	REQUIRE(ctx->isSet(vm_flags::V) == true);
+	num = vm_assemble("CLC\nLDA #$80\nADC #$FF\n");
+	vm_run();
+	REQUIRE(127 == (int)ctx->registers[vm_registers::A]);
+	REQUIRE(ctx->isSet(vm_flags::C) == true);
+	REQUIRE(ctx->isSet(vm_flags::V) == false);
+	vm_release();
+}
+
+TEST_CASE("RUN_ASL", "[ASM]") {
+	vm_context* ctx = vm_create();
+	int num = vm_assemble("LDA #$80\nASL A\n");
+	vm_run();
+	REQUIRE(0 == ctx->registers[vm_registers::A]);
+	REQUIRE(ctx->isSet(vm_flags::C) == true);
+	num = vm_assemble("LDA #$20\nASL A\n");
+	vm_run();
+	REQUIRE(0x40 == ctx->registers[vm_registers::A]);
+	REQUIRE(ctx->isSet(vm_flags::C) == false);
+	num = vm_assemble("LDA #$40\nASL A\n");
+	vm_run();
+	REQUIRE(0x80 == ctx->registers[vm_registers::A]);
+	REQUIRE(ctx->isSet(vm_flags::C) == false);
+	REQUIRE(ctx->isSet(vm_flags::N) == true);
+	vm_release();
+}

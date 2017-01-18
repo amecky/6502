@@ -72,7 +72,7 @@ bool vm_step();
 
 # Status
 
-This project is an alpha version. There might be changes to the API itself. 
+This project is an beta version. There might be changes to the API itself. 
 
 # Changelist
 
