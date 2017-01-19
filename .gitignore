@@ -15,3 +15,10 @@ shell/vs_2013/shell.opensdf
 AC64/AC64.VC.db
 AC64/AC64.VC.VC.opendb
 UnitTests/6502_Test.VC.db
+AC64/x64/Debug/vc140.idb
+AC64/x64/Debug/AC64.tlog/link.read.1.tlog
+AC64/x64/
+AC64/AC64.opensdf
+AC64/ipch/AC64-eeaa45a4/AC64-a1d59db8.ipch
+Debug/vc140.idb
+AC64/AC64.sdf

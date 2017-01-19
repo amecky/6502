@@ -1,0 +1,29 @@
+; Basic load
+LDA #$c0
+PHA
+LDX #$20
+LDY #$30
+TAX
+; increment and decrement
+INX
+DEX
+DEY
+DEC $0206 ; decrement absolute
+INY
+INC $0205
+STX $0201
+; some addition
+CLC
+ADC #$c4
+LDX #$02
+STA $0200
+STA $0200,X
+STY $0204
+STY $20
+STA $21,X
+; transfer test
+TAY
+TXA
+TYA
+PLA
+BRK

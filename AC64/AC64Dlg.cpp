@@ -68,6 +68,7 @@ void CAC64Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_REG_A3, _regY);
 	DDX_Control(pDX, IDC_REG_A2, _programCounter);
 	DDX_Control(pDX, IDC_REG_A4, _stackPointer);
+	DDX_Control(pDX, IDC_EDIT1, _cpuFlags);
 }
 
 BEGIN_MESSAGE_MAP(CAC64Dlg, CDialogEx)
@@ -78,6 +79,9 @@ BEGIN_MESSAGE_MAP(CAC64Dlg, CDialogEx)
 	ON_BN_CLICKED(IDC_RUN, &CAC64Dlg::OnBnClickedRun)
 	ON_BN_CLICKED(IDC_PREVIOUS_MEM, &CAC64Dlg::OnBnClickedPreviousMem)
 	ON_BN_CLICKED(IDC_NEXT_MEM, &CAC64Dlg::OnBnClickedNextMem)
+	ON_BN_CLICKED(IDC_LOAD_CODE, &CAC64Dlg::OnBnClickedLoadCode)
+	ON_BN_CLICKED(IDC_RESET_PC, &CAC64Dlg::OnBnClickedResetPc)
+	ON_BN_CLICKED(IDC_STEP, &CAC64Dlg::OnBnClickedStep)
 END_MESSAGE_MAP()
 
 
@@ -173,6 +177,9 @@ HCURSOR CAC64Dlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+// ----------------------------------------------------
+// dump memory
+// ----------------------------------------------------
 void CAC64Dlg::OnBnClickedDumpMemory() {	
 	CString txt = _T("");
 	_memAddress.GetWindowTextW(txt);
@@ -180,6 +187,9 @@ void CAC64Dlg::OnBnClickedDumpMemory() {
 	dumpMemory();
 }
 
+// ----------------------------------------------------
+// internal dump memory
+// ----------------------------------------------------
 void CAC64Dlg::dumpMemory() {
 	CString result = _T("");
 	int num = 256;
@@ -197,6 +207,9 @@ void CAC64Dlg::dumpMemory() {
 	updateCPUState();
 }
 
+// ----------------------------------------------------
+// Update CPU state
+// ----------------------------------------------------
 void CAC64Dlg::updateCPUState() {
 	CString result = _T("");
 	result.Format(_T("%02X"), _ctx->registers[vm_registers::A]);
@@ -209,8 +222,22 @@ void CAC64Dlg::updateCPUState() {
 	_programCounter.SetWindowTextW(result);
 	result.Format(_T("%02X"), _ctx->sp);
 	_stackPointer.SetWindowTextW(result);
+	// FIXME: update CPU flags
+	result = _T("CZIDBVN\r\n");
+	for (int i = 1; i < 8; ++i) {
+		if (_internal_ctx->isSet(i)) {
+			result.AppendChar('1');
+		}
+		else {
+			result.AppendChar('0');
+		}
+	}
+	_cpuFlags.SetWindowTextW(result);
 }
 
+// ----------------------------------------------------
+// Compile code from asm code edit box
+// ----------------------------------------------------
 int CAC64Dlg::compile() {
 	CString txt = _T("");
 	_asmCode.GetWindowTextW(txt);
@@ -219,6 +246,9 @@ int CAC64Dlg::compile() {
 	return vm_assemble(ascii.m_psz);
 }
 
+// ----------------------------------------------------
+// convert HEX to INT
+// ----------------------------------------------------
 int CAC64Dlg::hex2int(const CString & txt) {
 	CT2A ascii(txt);
 	const char* hex = ascii.m_psz;
@@ -239,7 +269,9 @@ int CAC64Dlg::hex2int(const CString & txt) {
 	return val;
 }
 
-
+// ----------------------------------------------------
+// Run code
+// ----------------------------------------------------
 void CAC64Dlg::OnBnClickedRun() {
 	_statucBarCtrl.SetText(_T(""), 0, 0);
 	int n = compile();
@@ -248,7 +280,9 @@ void CAC64Dlg::OnBnClickedRun() {
 	_statucBarCtrl.SetText(_T("Program executed"), 0, 0);
 }
 
-
+// ----------------------------------------------------
+// Previous memory block
+// ----------------------------------------------------
 void CAC64Dlg::OnBnClickedPreviousMem() {
 	_memoryAddress -= 0x100;
 	if (_memoryAddress < 0) {
@@ -260,7 +294,9 @@ void CAC64Dlg::OnBnClickedPreviousMem() {
 	dumpMemory();
 }
 
-
+// ----------------------------------------------------
+// Next memory block
+// ----------------------------------------------------
 void CAC64Dlg::OnBnClickedNextMem() {
 	_memoryAddress += 0x100;
 	if (_memoryAddress > 0xff00) {
@@ -270,4 +306,62 @@ void CAC64Dlg::OnBnClickedNextMem() {
 	adr.AppendFormat(_T("0x%04X"), _memoryAddress);
 	_memAddress.SetWindowTextW(adr);
 	dumpMemory();
+}
+
+// ----------------------------------------------------
+// Load text file into asm code edit box
+// ----------------------------------------------------
+void CAC64Dlg::OnBnClickedLoadCode() {
+	CFileDialog fileDlg(TRUE, _T("txt"), _T("*.txt"),
+		OFN_FILEMUSTEXIST | OFN_HIDEREADONLY, _T("Text Files(*.txt) | *.txt | All Files(*.*) | *.* || "), this);
+	CString filename;
+	if (fileDlg.DoModal() == IDOK) {
+		filename = fileDlg.GetPathName(); 
+		CT2A ascii(filename);
+		FILE *fp = fopen(ascii.m_szBuffer, "r");
+		if (fp) {
+			fseek(fp, 0, SEEK_END);
+			int sz = ftell(fp);
+			fseek(fp, 0, SEEK_SET);
+			char* data = new char[sz + 1];
+			fread(data, 1, sz, fp);
+			data[sz] = '\0';
+			fclose(fp);
+			char* p = data;
+			CString tmp;
+			while (*p != 0) {
+				if (*p != '\n') {
+					tmp.AppendChar(*p);					
+				}
+				else {
+					tmp.Append(_T("\r\n"));
+				}
+				++p;
+			}
+			_asmCode.SetWindowTextW(tmp);
+			compile();
+			delete[] data;
+			_statucBarCtrl.SetText(_T("Program loaded and compiled"), 0, 0);
+		}
+	}
+}
+
+// ----------------------------------------------------
+// Reset context
+// ----------------------------------------------------
+void CAC64Dlg::OnBnClickedResetPc() {
+	vm_reset();
+	updateCPUState();
+	_statucBarCtrl.SetText(_T("Context resetted"), 0, 0);
+}
+
+// ----------------------------------------------------
+// Single step execution
+// ----------------------------------------------------
+void CAC64Dlg::OnBnClickedStep() {
+	vm_step();
+	dumpMemory();
+	updateCPUState();
+	CString str(_ctx->debug);
+	_statucBarCtrl.SetText(str, 0, 0);
 }

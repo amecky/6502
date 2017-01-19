@@ -89,7 +89,9 @@ class ShellDisassemble : public ShellCommand {
 public:
 	ShellDisassemble() {}
 	void execute(const TextLine& line) {
-		vm_disassemble();
+		std::string code;
+		vm_disassemble(code);
+		printf("%s\n", code.c_str());
 	}
 	void write_syntax() {
 		printf("dsm - disassemble memory\n");

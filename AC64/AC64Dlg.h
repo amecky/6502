@@ -56,4 +56,10 @@ private:
 	CEdit _regY;
 	CEdit _programCounter;
 	CEdit _stackPointer;
+public:
+	afx_msg void OnBnClickedLoadCode();
+	afx_msg void OnBnClickedResetPc();
+	afx_msg void OnBnClickedStep();
+private:
+	CEdit _cpuFlags;
 };

@@ -25,7 +25,7 @@ API:
 	int vm_assemble(const char* code);
 		This method will assemble the provided code.
 		
-	void vm_disassemble();
+	void vm_disassemble(std::string& out);
 		Disassemble the memory at 0x600.
 
 	void vm_dump(int pc, int num);
@@ -37,8 +37,12 @@ API:
 	bool vm_step();
 		Single step through the code. If you want to start from the beginning of the code set the
 		program counter in the context to 0x600
+
 	void vm_run();
 		Will run the code at 0x600. Make sure you have either loaded or assembled some code before.
+
+	void vm_reset();
+		Will reset the registers and flags and also the program counter to 0x600.
 		
 DEFINES:
 	VM_IMPLEMENTATION
@@ -88,7 +92,7 @@ LICENSE:
 */
 #pragma once
 #include <stdint.h>
-
+#include <string>
 // for unit testing we define all methods to be public
 #if defined(VM_TEST_SUPPORT)
 #define PRIVATE 
@@ -149,7 +153,6 @@ typedef void(*vm_LogFunc)(const char* message);
 typedef struct vm_context {
 
 	uint8_t registers[3];
-	uint8_t a, x, y;
 	uint16_t programCounter;
 	uint8_t mem[65536];
 	uint8_t sp;
@@ -157,6 +160,7 @@ typedef struct vm_context {
 	uint16_t numCommands;
 	uint16_t numBytes;
 	vm_LogFunc logFunction;
+	char debug[256];
 
 	void clearFlags() {
 		flags = 0;
@@ -194,8 +198,8 @@ typedef struct vm_context {
 	}
 
 	uint8_t pop() {
-		uint8_t v = mem[0x100 + sp];
 		++sp;
+		uint8_t v = mem[0x100 + sp];		
 		return v;
 	}
 } vm_context;
@@ -214,7 +218,7 @@ void vm_save(const char* fileName);
 
 int vm_assemble_file(const char* fileName);
 
-void vm_disassemble();
+void vm_disassemble(std::string& out);
 
 int vm_assemble(const char* code);
 
@@ -227,6 +231,8 @@ void vm_memory_dump(uint16_t pc, uint16_t num);
 bool vm_step();
 
 void vm_run();
+
+void vm_reset();
 
 
 #if defined(VM_IMPLEMENTATION)
@@ -311,9 +317,6 @@ vm_context* vm_create() {
 		for (int i = 0; i < 65536; ++i) {
 			_internal_ctx->mem[i] = 0;
 		}
-		_internal_ctx->a = 0;
-		_internal_ctx->x = 0;
-		_internal_ctx->y = 0;
 		_internal_ctx->registers[vm_registers::A] = 0;
 		_internal_ctx->registers[vm_registers::X] = 0;
 		_internal_ctx->registers[vm_registers::Y] = 0;
@@ -328,6 +331,22 @@ vm_context* vm_create() {
 		_internal_ctx->logFunction = std_log;
 	}
 	return _internal_ctx;
+}
+
+// -----------------------------------------------------
+// create internal context
+// -----------------------------------------------------
+void vm_reset() {
+	if (_internal_ctx == nullptr) {
+		_internal_ctx->registers[vm_registers::A] = 0;
+		_internal_ctx->registers[vm_registers::X] = 0;
+		_internal_ctx->registers[vm_registers::Y] = 0;
+		for (int i = 0; i < 7; ++i) {
+			_internal_ctx->clearFlag(i);
+		}
+		_internal_ctx->programCounter = 0x600;
+		_internal_ctx->sp = 255;
+	}
 }
 
 // -----------------------------------------------------
@@ -1445,7 +1464,7 @@ typedef struct vm_token {
 	int line;
 } vm_token;
 
-	
+typedef std::vector<vm_token> TokenList;
 
 PRIVATE char* read_file(const char* fileName) {
 	FILE *fp = fopen(fileName, "r");
@@ -1538,6 +1557,7 @@ PRIVATE float str2f(const char* p, char** endPtr) {
 // -----------------------------------------------------------------
 // Tokenizer
 // -----------------------------------------------------------------
+/*
 class Tokenizer {
 
 public:
@@ -1653,6 +1673,87 @@ private:
 	const char* _text;
 	bool _created;
 };
+*/
+PRIVATE bool vm_is_text(const char* p, const char* beginning) {
+	const char* prev = p - 1;
+	if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')) {
+		if (prev >= beginning && *prev == '$') {
+			return false;
+		}
+		if (prev >= beginning && *prev == ',') {
+			return false;
+		}
+		return true;
+	}
+	return false;
+}
+
+PRIVATE bool vm_tokenize(const char* text,TokenList& tokens) {
+	//_text = text;
+	int cnt = 0;
+	const char* p = text;
+	int line = 1;
+	while (*p != 0) {
+		vm_token token(vm_token::EMPTY);
+		if (vm_is_text(p,text)) {
+			const char *identifier = p;
+			while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z'))
+				p++;
+			token = vm_token(vm_token::STRING);
+			int cmdIdx = find_command(identifier);
+			if (cmdIdx != -1) {
+				token = vm_token(vm_token::COMMAND, cmdIdx);
+			}
+			else {
+				int l = p - identifier;
+				if (strncmp("A", identifier, l) == 0) {
+					token = vm_token(vm_token::ACCUMULATOR);
+				}
+				else {
+					token.hash = fnv1a(identifier, p - identifier);
+				}
+			}
+		}
+		else if (isHex(*p)) {
+			const char* before = p - 1;
+			if (*before == '$') {
+				char *out;
+				token = vm_token(vm_token::NUMBER, hex2int(p, &out));
+				p = out;
+			}
+		}
+		else if (isDigit(p)) {
+			char *out;
+			token = vm_token(vm_token::NUMBER, str2f(p, &out));
+			p = out;
+		}
+		else if (*p == ';') {
+			while (*p != '\n')
+				p++;
+		}
+		else {
+			switch (*p) {
+			case '(': token = vm_token(vm_token::OPEN_BRACKET); break;
+			case ')': token = vm_token(vm_token::CLOSE_BRACKET); break;
+			case ' ': case '\t': case '\r': break;
+			case '\n': ++line; break;
+			case ':': token = vm_token(vm_token::SEPARATOR); break;
+			case 'X': token = vm_token(vm_token::X); break;
+			case 'Y': token = vm_token(vm_token::Y); break;
+			case 'A': token = vm_token(vm_token::ACCUMULATOR); break;
+			case '#': token = vm_token(vm_token::HASHTAG); break;
+			case ',': token = vm_token(vm_token::COMMA); break;
+			}
+			++p;
+		}
+		if (token.type != vm_token::EMPTY) {
+			token.line = line;
+			tokens.push_back(token);
+		}
+	}
+	return true;
+}
+
 
 PRIVATE const char* translate_token_tpye(const vm_token& t) {
 	switch (t.type) {
@@ -1733,19 +1834,19 @@ PRIVATE const char* translate_addressing_mode(vm_addressing_mode mode) {
 // -----------------------------------------------------------------
 // get addressing mode 
 // -----------------------------------------------------------------
-PRIVATE vm_addressing_mode get_addressing_mode(const Tokenizer & tokenizer, uint16_t pos) {
-	const vm_token& command = tokenizer.get(pos);
+PRIVATE vm_addressing_mode get_addressing_mode(const TokenList& tokens, uint16_t pos) {
+	const vm_token& command = tokens[pos];
 	if (command.type == vm_token::COMMAND) {
-		const vm_token& next = tokenizer.get(pos + 1);
+		const vm_token& next = tokens[pos + 1];
 		if (next.type == vm_token::HASHTAG) {
 			return vm_addressing_mode::IMMEDIDATE;
 		}
 		else if (next.type == vm_token::NUMBER) {
 			int v = next.value;
-			if (pos + 2 < tokenizer.num()) {
-				const vm_token& nn = tokenizer.get(pos + 2);
+			if (pos + 2 < tokens.size()) {
+				const vm_token& nn = tokens[pos + 2];
 				if (nn.type == vm_token::COMMA) {
-					const vm_token& nn = tokenizer.get(pos + 3);
+					const vm_token& nn = tokens[pos + 3];
 					if (nn.type == vm_token::X) {
 						if (v <= 255) {
 							return vm_addressing_mode::ZERO_PAGE_X;
@@ -1784,30 +1885,32 @@ PRIVATE vm_addressing_mode get_addressing_mode(const Tokenizer & tokenizer, uint
 // -----------------------------------------------------------------
 // disassemble memory
 // -----------------------------------------------------------------
-void vm_disassemble() {
+void vm_disassemble(std::string& out) {
 	if (_internal_ctx != nullptr) {
 		int pc = 0x600;
 		int end = pc + _internal_ctx->numBytes;
+		char buffer[128];
 		while (pc < end) {
 			uint8_t hex = _internal_ctx->read(pc);
 			const vm_command_mapping& mapping = get_command_mapping(hex);
 			const vm_command& cmd = VM_COMMANDS[mapping.op_code];
-			printf("%04X ", pc);
-			printf("%s ", cmd.name);
+			//printf("%04X ", pc);
+			//printf("%s ", cmd.name);
 			switch (mapping.mode) {
-			case IMMEDIDATE: printf("#$%02X", _internal_ctx->read(pc + 1)); break;
-			case ABSOLUTE_ADR: printf("$%04X", _internal_ctx->readInt(pc + 1)); break;
-			case ABSOLUTE_X: printf("$%04X,X", _internal_ctx->readInt(pc + 1)); break;
-			case ABSOLUTE_Y: printf("$%04X,Y", _internal_ctx->readInt(pc + 1)); break;
-			case ZERO_PAGE: printf("$%02X", _internal_ctx->read(pc + 1)); break;
-			case ZERO_PAGE_X: printf("$%02X,X", _internal_ctx->read(pc + 1)); break;
-			case ZERO_PAGE_Y: printf("$%02X,Y", _internal_ctx->read(pc + 1)); break;
-			case INDIRECT_X: printf("$(%04X),X", _internal_ctx->readInt(pc + 1)); break;
-			case INDIRECT_Y: printf("$(%04X),Y", _internal_ctx->readInt(pc + 1)); break;
-			case RELATIVE_ADR: printf("$%02X", _internal_ctx->read(pc + 1)); break;
-			case ACCUMULATOR: printf("A"); break;
+				case IMMEDIDATE: sprintf_s(buffer,"%04X %s #$%02X\n", pc, cmd.name, _internal_ctx->read(pc + 1)); break;
+				case ABSOLUTE_ADR: sprintf_s(buffer, "%04X %s $%04X\n", pc, cmd.name, _internal_ctx->readInt(pc + 1)); break;
+				case ABSOLUTE_X: sprintf_s(buffer, "%04X %s $%04X,X\n", pc, cmd.name, _internal_ctx->readInt(pc + 1)); break;
+				case ABSOLUTE_Y: sprintf_s(buffer, "%04X %s $%04X,Y\n", pc, cmd.name, _internal_ctx->readInt(pc + 1)); break;
+				case ZERO_PAGE: sprintf_s(buffer, "%04X %s $%02X\n", pc, cmd.name, _internal_ctx->read(pc + 1)); break;
+				case ZERO_PAGE_X: sprintf_s(buffer, "%04X %s $%02X,X\n", pc, cmd.name, _internal_ctx->read(pc + 1)); break;
+				case ZERO_PAGE_Y: sprintf_s(buffer, "%04X %s $%02X,Y\n", pc, cmd.name, _internal_ctx->read(pc + 1)); break;
+				case INDIRECT_X: sprintf_s(buffer, "%04X %s $(%04X),X\n", pc, cmd.name, _internal_ctx->readInt(pc + 1)); break;
+				case INDIRECT_Y: sprintf_s(buffer, "%04X %s $(%04X),Y\n", pc, cmd.name, _internal_ctx->readInt(pc + 1)); break;
+				case RELATIVE_ADR: sprintf_s(buffer, "%04X %s $%02X\n", pc, cmd.name, _internal_ctx->read(pc + 1)); break;
+				case ACCUMULATOR: sprintf_s(buffer, "%04X %s A\n", pc, cmd.name); break;
 			}
-			printf("\n");
+			//printf("\n");
+			out += buffer;
 			pc += VM_DATA_SIZE[mapping.mode] + 1;
 		}
 	}
@@ -1825,13 +1928,13 @@ typedef struct vm_label_definition {
 // -----------------------------------------------------------------
 // convert tokens 
 // -----------------------------------------------------------------
-PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, uint16_t* numCommands) {
-	vm_log("tokens: %d", tokenizer.num());
+PRIVATE int assemble(const TokenList& tokens, vm_context* ctx, uint16_t* numCommands) {
+	vm_log("tokens: %d", tokens.size());
 	uint16_t pc = 0x600;
 	std::vector<vm_label_definition> definitions;
 	std::vector<vm_label_definition> branches;
-	for (size_t i = 0; i < tokenizer.num(); ++i) {
-		const vm_token& t = tokenizer.get(i);
+	for (size_t i = 0; i < tokens.size(); ++i) {
+		const vm_token& t = tokens[i];
 		vm_log("%d = %s (line: %d)", i, translate_token_tpye(t), t.line);
 		if (t.type == vm_token::COMMAND) {
 			if (numCommands != nullptr) {
@@ -1840,26 +1943,26 @@ PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, uint16_t* num
 			const vm_command& cmd = VM_COMMANDS[t.value];
 			vm_addressing_mode mode = vm_addressing_mode::NONE;
 			if (cmd.supportedModes != 0) {
-				mode = get_addressing_mode(tokenizer, i);
+				mode = get_addressing_mode(tokens, i);
 			}
 			uint8_t hex = get_hex_value(t, mode);
 			vm_log("=> index: %d  mode: %s cmd: %s (%X)", t.value, translate_addressing_mode(mode), cmd.name, hex);
 			ctx->write(pc++, hex);
 			if (mode == vm_addressing_mode::IMMEDIDATE) {
-				const vm_token& next = tokenizer.get(i + 2);
+				const vm_token& next = tokens[i + 2];
 				ctx->write(pc++, next.value);
 			}
 			else if (mode == vm_addressing_mode::ABSOLUTE_ADR || mode == vm_addressing_mode::ABSOLUTE_X || mode == vm_addressing_mode::ABSOLUTE_Y) {
-				const vm_token& next = tokenizer.get(i + 1);
+				const vm_token& next = tokens[i + 1];
 				ctx->write(pc++, low_value(next.value));
 				ctx->write(pc++, high_value(next.value));
 			}
 			else if (mode == vm_addressing_mode::ZERO_PAGE || mode == vm_addressing_mode::ZERO_PAGE_X || mode == vm_addressing_mode::ZERO_PAGE_Y) {
-				const vm_token& next = tokenizer.get(i + 1);
+				const vm_token& next = tokens[i + 1];
 				ctx->write(pc++, low_value(next.value));
 			}
 			else if (mode == vm_addressing_mode::RELATIVE_ADR) {
-				const vm_token& next = tokenizer.get(i + 1);
+				const vm_token& next = tokens[i + 1];
 				vm_label_definition def;
 				def.hash = next.hash;
 				def.pc = pc;
@@ -1868,7 +1971,7 @@ PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, uint16_t* num
 				ctx->write(pc++, 0);
 			}
 			else if (mode == vm_addressing_mode::JMP_ABSOLUTE || mode == vm_addressing_mode::JMP_INDIRECT) {
-				const vm_token& next = tokenizer.get(i + 1);
+				const vm_token& next = tokens[i + 1];
 				vm_label_definition def;
 				def.hash = next.hash;
 				def.pc = pc;
@@ -1879,7 +1982,7 @@ PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, uint16_t* num
 			}
 		}
 		else if (t.type == vm_token::STRING) {
-			const vm_token& next = tokenizer.get(i + 1);
+			const vm_token& next = tokens[i + 1];
 			if (next.type == vm_token::SEPARATOR) {
 				vm_label_definition def;
 				def.hash = t.hash;
@@ -1917,12 +2020,17 @@ PRIVATE int assemble(const Tokenizer & tokenizer, vm_context* ctx, uint16_t* num
 // ---------------------------------------------------------
 int vm_assemble_file(const char* fileName) {
 	if (_internal_ctx != nullptr) {
-		Tokenizer tokenizer;
-		if (tokenizer.parseFile(fileName)) {
-			_internal_ctx->numBytes = assemble(tokenizer, _internal_ctx, &_internal_ctx->numCommands);
-			//save(buffer);
-			vm_memory_dump(0x600, _internal_ctx->numBytes);
-			return _internal_ctx->numBytes;
+		std::vector<vm_token> tokens;
+		const char* code = read_file(fileName);
+		if (code != 0) {
+			TokenList tokens;
+			if (vm_tokenize(code, tokens)) {
+				_internal_ctx->numBytes = assemble(tokens, _internal_ctx, &_internal_ctx->numCommands);
+				//save(buffer);
+				vm_memory_dump(0x600, _internal_ctx->numBytes);
+				return _internal_ctx->numBytes;
+			}
+			delete[] code;
 		}
 		else {
 			printf("ERROR: cannot laod file: '%s'\n", fileName);
@@ -1936,9 +2044,10 @@ int vm_assemble_file(const char* fileName) {
 // ---------------------------------------------------------
 int vm_assemble(const char* code) {
 	if (_internal_ctx != nullptr) {
-		Tokenizer tokenizer;
-		if (tokenizer.parse(code)) {
-			_internal_ctx->numBytes = assemble(tokenizer, _internal_ctx, &_internal_ctx->numCommands);
+		//Tokenizer tokenizer;
+		TokenList tokens;
+		if (vm_tokenize(code,tokens)) {
+			_internal_ctx->numBytes = assemble(tokens, _internal_ctx, &_internal_ctx->numCommands);
 			//save(buffer);
 			vm_memory_dump(0x600, _internal_ctx->numBytes);
 			return _internal_ctx->numBytes;
@@ -2052,6 +2161,7 @@ PRIVATE int get_data(vm_context* ctx, const vm_addressing_mode& mode) {
 // ---------------------------------------------------------
 PRIVATE bool vm_step() {
 	if (_internal_ctx != nullptr) {
+		// FIXME: check if we still have a valid PC
 		uint8_t cmdIdx = _internal_ctx->read(_internal_ctx->programCounter);
 		const vm_command_mapping& mapping = get_command_mapping(cmdIdx);
 		const vm_command& cmd = VM_COMMANDS[mapping.op_code];
@@ -2060,6 +2170,7 @@ PRIVATE bool vm_step() {
 		int add = VM_DATA_SIZE[mode] + 1;
 		(*cmd.function)(_internal_ctx, data, mode);
 		printf("%04X %s (%02X) data: %04X mode: %s add: %d\n", _internal_ctx->programCounter, cmd.name, cmdIdx, data, translate_addressing_mode(mode),add);
+		sprintf_s(_internal_ctx->debug,"%04X %s (%02X) data: %04X mode: %s add: %d\n", _internal_ctx->programCounter, cmd.name, cmdIdx, data, translate_addressing_mode(mode), add);
 		if (!cmd.modifyPC) {
 			_internal_ctx->programCounter += add;
 		}
