@@ -62,4 +62,13 @@ public:
 	afx_msg void OnBnClickedStep();
 private:
 	CEdit _cpuFlags;
+public:
+	afx_msg void OnBnClickedLoadBin();
+	afx_msg void OnBnClickedSaveBin();
+	afx_msg void OnBnClickedSaveText();
+private:
+	CEdit _numCommands;
+	CEdit _numBytes;
+public:
+	afx_msg void OnBnClickedCompile();
 };

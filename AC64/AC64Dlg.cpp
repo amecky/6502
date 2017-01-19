@@ -69,6 +69,8 @@ void CAC64Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_REG_A2, _programCounter);
 	DDX_Control(pDX, IDC_REG_A4, _stackPointer);
 	DDX_Control(pDX, IDC_EDIT1, _cpuFlags);
+	DDX_Control(pDX, IDC_REG_A5, _numCommands);
+	DDX_Control(pDX, IDC_REG_A6, _numBytes);
 }
 
 BEGIN_MESSAGE_MAP(CAC64Dlg, CDialogEx)
@@ -82,6 +84,10 @@ BEGIN_MESSAGE_MAP(CAC64Dlg, CDialogEx)
 	ON_BN_CLICKED(IDC_LOAD_CODE, &CAC64Dlg::OnBnClickedLoadCode)
 	ON_BN_CLICKED(IDC_RESET_PC, &CAC64Dlg::OnBnClickedResetPc)
 	ON_BN_CLICKED(IDC_STEP, &CAC64Dlg::OnBnClickedStep)
+	ON_BN_CLICKED(IDC_LOAD_BIN, &CAC64Dlg::OnBnClickedLoadBin)
+	ON_BN_CLICKED(IDC_SAVE_BIN, &CAC64Dlg::OnBnClickedSaveBin)
+	ON_BN_CLICKED(IDC_SAVE_TEXT, &CAC64Dlg::OnBnClickedSaveText)
+	ON_BN_CLICKED(IDC_COMPILE, &CAC64Dlg::OnBnClickedCompile)
 END_MESSAGE_MAP()
 
 
@@ -124,7 +130,7 @@ BOOL CAC64Dlg::OnInitDialog()
 	GetClientRect(&r);
 	r.top = r.bottom - 20;
 	_statucBarCtrl.Create(WS_BORDER | WS_VISIBLE | CBRS_BOTTOM, r, this, 3);
-	_statucBarCtrl.SetText(_T("Hello world"), 0, 0);
+	_statucBarCtrl.SetText(_T("Status text"), 0, 0);
 	return TRUE;  // TRUE zurückgeben, wenn der Fokus nicht auf ein Steuerelement gesetzt wird
 }
 
@@ -233,6 +239,10 @@ void CAC64Dlg::updateCPUState() {
 		}
 	}
 	_cpuFlags.SetWindowTextW(result);
+	result.Format(_T("%d"), _ctx->numCommands);
+	_numCommands.SetWindowTextW(result);
+	result.Format(_T("%d"), _ctx->numBytes);
+	_numBytes.SetWindowTextW(result);
 }
 
 // ----------------------------------------------------
@@ -340,6 +350,8 @@ void CAC64Dlg::OnBnClickedLoadCode() {
 			}
 			_asmCode.SetWindowTextW(tmp);
 			compile();
+			dumpMemory();
+			updateCPUState();
 			delete[] data;
 			_statucBarCtrl.SetText(_T("Program loaded and compiled"), 0, 0);
 		}
@@ -364,4 +376,46 @@ void CAC64Dlg::OnBnClickedStep() {
 	updateCPUState();
 	CString str(_ctx->debug);
 	_statucBarCtrl.SetText(str, 0, 0);
+}
+
+
+void CAC64Dlg::OnBnClickedLoadBin()
+{
+	// TODO: Fügen Sie hier Ihren Kontrollbehandlungscode für die Benachrichtigung ein.
+}
+
+
+void CAC64Dlg::OnBnClickedSaveBin()
+{
+	// TODO: Fügen Sie hier Ihren Kontrollbehandlungscode für die Benachrichtigung ein.
+}
+
+// ----------------------------------------------------
+// Save code 
+// ----------------------------------------------------
+void CAC64Dlg::OnBnClickedSaveText() {
+	CFileDialog fileDlg(FALSE, _T("txt"), _T("*.txt"),
+		OFN_FILEMUSTEXIST | OFN_HIDEREADONLY, _T("Text Files(*.txt) | *.txt | All Files(*.*) | *.* || "), this);
+	CString filename;
+	if (fileDlg.DoModal() == IDOK) {
+		filename = fileDlg.GetPathName();
+		CFile theFile(filename, CFile::modeReadWrite | CFile::modeCreate);
+		CString txt = _T("");
+		_asmCode.GetWindowTextW(txt);
+		CT2A ascii(txt);
+
+		theFile.Write(ascii,
+			txt.GetLength() * sizeof(CHAR));
+
+		theFile.Close();
+	}
+}
+
+// ----------------------------------------------------
+// Compile code 
+// ----------------------------------------------------
+void CAC64Dlg::OnBnClickedCompile() {
+	compile();
+	dumpMemory();
+	updateCPUState();
 }

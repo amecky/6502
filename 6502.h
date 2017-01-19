@@ -337,7 +337,7 @@ vm_context* vm_create() {
 // create internal context
 // -----------------------------------------------------
 void vm_reset() {
-	if (_internal_ctx == nullptr) {
+	if (_internal_ctx != nullptr) {
 		_internal_ctx->registers[vm_registers::A] = 0;
 		_internal_ctx->registers[vm_registers::X] = 0;
 		_internal_ctx->registers[vm_registers::Y] = 0;
