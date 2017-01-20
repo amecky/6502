@@ -88,6 +88,7 @@ BEGIN_MESSAGE_MAP(CAC64Dlg, CDialogEx)
 	ON_BN_CLICKED(IDC_SAVE_BIN, &CAC64Dlg::OnBnClickedSaveBin)
 	ON_BN_CLICKED(IDC_SAVE_TEXT, &CAC64Dlg::OnBnClickedSaveText)
 	ON_BN_CLICKED(IDC_COMPILE, &CAC64Dlg::OnBnClickedCompile)
+	ON_EN_CHANGE(IDC_REG_X, &CAC64Dlg::OnEnChangeRegX)
 END_MESSAGE_MAP()
 
 
@@ -418,4 +419,15 @@ void CAC64Dlg::OnBnClickedCompile() {
 	compile();
 	dumpMemory();
 	updateCPUState();
+}
+
+
+void CAC64Dlg::OnEnChangeRegX()
+{
+	// TODO:  If this is a RICHEDIT control, the control will not
+	// send this notification unless you override the CDialogEx::OnInitDialog()
+	// function and call CRichEditCtrl().SetEventMask()
+	// with the ENM_CHANGE flag ORed into the mask.
+
+	// TODO:  Add your control notification handler code here
 }

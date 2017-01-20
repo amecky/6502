@@ -71,4 +71,5 @@ private:
 	CEdit _numBytes;
 public:
 	afx_msg void OnBnClickedCompile();
+	afx_msg void OnEnChangeRegX();
 };
