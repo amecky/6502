@@ -85,3 +85,11 @@ TEST_CASE("RUN_LDX_INX_STX", "[ASM]") {
 	REQUIRE(49 == (int)ctx->mem[0x203]);
 	vm_release();
 }
+
+TEST_CASE("ASSEMBLE_UNKNOWN", "[ASM]") {
+	vm_context* ctx = vm_create();
+	int num = vm_assemble("TRX #$30\n");
+	printf("===> %s\n", ctx->debug);
+	REQUIRE(num == 100);
+	vm_release();
+}

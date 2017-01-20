@@ -176,8 +176,6 @@ typedef enum vm_flags {
 	N
 } vm_flags;
 
-typedef void(*vm_LogFunc)(const char* message);
-
 // -----------------------------------------------------
 // The virtual machine vm_context
 // -----------------------------------------------------
@@ -190,7 +188,6 @@ typedef struct vm_context {
 	uint8_t flags;
 	uint16_t numCommands;
 	uint16_t numBytes;
-	vm_LogFunc logFunction;
 	char debug[256];
 
 	void clearFlags() {
@@ -311,35 +308,6 @@ PRIVATE bool vm_is_bit_set(uint8_t flags, uint8_t idx) {
 typedef void(*commandFunc)(vm_context*, int, vm_addressing_mode);
 
 // -----------------------------------------------------
-// No logging log
-// -----------------------------------------------------
-PRIVATE void no_log(const char* message) {
-}
-
-// -----------------------------------------------------
-// No logging log
-// -----------------------------------------------------
-PRIVATE void std_log(const char* message) {
-	printf("%s\n", message);
-}
-
-// -----------------------------------------------------
-// internal logging
-// -----------------------------------------------------
-PRIVATE void vm_log(const char *fmt, ...) {
-	if (_internal_ctx != nullptr) {
-		char buffer[1024];
-		va_list args;
-		va_start(args, fmt);
-		vsnprintf(buffer, sizeof buffer, fmt, args);
-		va_end(args);
-		buffer[(sizeof buffer) - 1] = '\0';
-		(*_internal_ctx->logFunction)(buffer);
-	}
-}
-
-
-// -----------------------------------------------------
 // create internal context
 // -----------------------------------------------------
 vm_context* vm_create() {
@@ -358,8 +326,6 @@ vm_context* vm_create() {
 		_internal_ctx->numBytes = 0;
 		_internal_ctx->programCounter = 0x600;
 		_internal_ctx->sp = 255;
-		_internal_ctx->logFunction = no_log;
-		_internal_ctx->logFunction = std_log;
 	}
 	return _internal_ctx;
 }
@@ -589,88 +555,6 @@ PRIVATE void vm_op_inc(vm_context* ctx, int data, vm_addressing_mode mode) {
 // ADC
 // ------------------------------------------
 PRIVATE void vm_op_adc(vm_context* ctx, int data, vm_addressing_mode mode) {
-	/*
-	Remember the two purposes of the carry flag? The first purpose was to allow addition and subtraction to be extended beyond 8 bits. The carry is still used for this purpose when adding or subtracting twos complement numbers. For example:
-
-	CLC       ; RESULT = NUM1 + NUM2
-	LDA NUM1L
-	ADC NUM2L
-	STA RESULTL
-	LDA NUM1H
-	ADC NUM2H
-	STA RESULTH
-
-	The carry from the ADC NUM2L is used by the ADC NUM2H.
-
-	The second purpose was to indicate when the number was outside the (unsigned) range, 0 to 255. But the range of a 8-bit twos complement number is -128 to 127, and the carry does not indicate whether the result is outside this range, as the following examples illustrate:
-
-	CLC      ; 1 + 1 = 2, returns C = 0
-	LDA #$01
-	ADC #$01
-
-	CLC      ; 1 + -1 = 0, returns C = 1
-	LDA #$01
-	ADC #$FF
-
-	CLC      ; 127 + 1 = 128, returns C = 0
-	LDA #$7F
-	ADC #$01
-
-	CLC      ; -128 + -1 = -129, returns C = 1
-	LDA #$80
-	ADC #$FF
-
-	This is where V comes in. V indicates whether the result of an addition or subraction is outside the range -128 to 127, i.e. whether there is a twos complement overflow. A few examples are in order:
-
-	CLC      ; 1 + 1 = 2, returns V = 0
-	LDA #$01
-	ADC #$01
-
-	CLC      ; 1 + -1 = 0, returns V = 0
-	LDA #$01
-	ADC #$FF
-
-	CLC      ; 127 + 1 = 128, returns V = 1
-	LDA #$7F
-	ADC #$01
-
-	CLC      ; -128 + -1 = -129, returns V = 1
-	LDA #$80
-	ADC #$FF
-
-	SEC      ; 0 - 1 = -1, returns V = 0
-	LDA #$00
-	SBC #$01
-
-	SEC      ; -128 - 1 = -129, returns V = 1
-	LDA #$80
-	SBC #$01
-
-	SEC      ; 127 - -1 = 128, returns V = 1
-	LDA #$7F
-	SBC #$FF
-
-	Remember that ADC and SBC not only affect the carry flag, but they also use the value of the carry flag (i.e. the value before the ADC or SBC), and this will affect the result and will affect V. For example:
-
-	SEC      ; Note: SEC, not CLC
-	LDA #$3F ; 63 + 64 + 1 = 128, returns V = 1
-	ADC #$40
-
-	CLC      ; Note: CLC, not SEC
-	LDA #$C0 ; -64 - 64 - 1 = -129, returns V = 1
-	SBC #$40
-
-	The same principles apply when adding or subtracting 16-bit two complement numbers. For example:
-
-	SEC         ; RESULT = NUM1 - NUM2
-	LDA NUM1L   ; After the SBC NUM2H instruction:
-	SBC NUM2L   ;   V = 0 if -32768 <= RESULT <= 32767
-	STA RESULTL ;   V = 1 if RESULT < -32768 or RESULT > 32767
-	LDA NUM1H
-	SBC NUM2H
-	STA RESULTH
-
-	*/
 	if (ctx->isSet(vm_flags::C)) {
 		++data;
 	}
@@ -1954,13 +1838,16 @@ int vm_assemble_file(const char* fileName) {
 			TokenList tokens;
 			if (vm_tokenize(code, tokens)) {
 				_internal_ctx->numBytes = assemble(tokens, _internal_ctx, &_internal_ctx->numCommands);
-				vm_dump_memory(0x600, _internal_ctx->numBytes);
+				sprintf_s(_internal_ctx->debug, "Code successfully assembled - commands: %d bytes: %d", _internal_ctx->numCommands, _internal_ctx->numBytes);
 				return _internal_ctx->numBytes;
+			}
+			else {
+				sprintf_s(_internal_ctx->debug, "Cannot compile code");
 			}
 			delete[] code;
 		}
 		else {
-			printf("ERROR: cannot laod file: '%s'\n", fileName);
+			sprintf_s(_internal_ctx->debug, "Cannot laod file: '%s'", fileName);
 		}
 	}
 	return 0;
@@ -1974,7 +1861,11 @@ int vm_assemble(const char* code) {
 		TokenList tokens;
 		if (vm_tokenize(code,tokens)) {
 			_internal_ctx->numBytes = assemble(tokens, _internal_ctx, &_internal_ctx->numCommands);
+			sprintf_s(_internal_ctx->debug, "Code successfully assembled - commands: %d bytes: %d", _internal_ctx->numCommands, _internal_ctx->numBytes);
 			return _internal_ctx->numBytes;
+		}
+		else {
+			sprintf_s(_internal_ctx->debug, "Cannot compile code");
 		}
 	}
 	return 0;
@@ -2093,7 +1984,6 @@ PRIVATE bool vm_step() {
 		int data = get_data(_internal_ctx, mode);
 		int add = VM_DATA_SIZE[mode] + 1;
 		(*cmd.function)(_internal_ctx, data, mode);
-		//printf("%04X %s (%02X) data: %04X mode: %s add: %d\n", _internal_ctx->programCounter, cmd.name, cmdIdx, data, translate_addressing_mode(mode),add);
 		sprintf_s(_internal_ctx->debug,"%04X %s (%02X) data: %04X mode: %s add: %d\n", _internal_ctx->programCounter, cmd.name, cmdIdx, data, translate_addressing_mode(mode), add);
 		if (!cmd.modifyPC) {
 			_internal_ctx->programCounter += add;
