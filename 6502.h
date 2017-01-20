@@ -30,10 +30,13 @@ API:
 		Disassemble the memory at 0x600.
 
 	void vm_dump(int pc, int num);
+		This method will dump the registers and CPU flags and also a part of the memory.
 
 	void vm_dump_registers();
+		This method dumps the registers and CPU flags.
 
 	void vm_dump_memory(int pc, int num);
+		Will dump the memory
 
 	bool vm_step();
 		Single step through the code. If you want to start from the beginning of the code set the
@@ -55,16 +58,43 @@ DEFINES:
 	VM_TEST_SUPPORT
 		This is only used internally to be able to unit test all methods. Do not use this define.
 
-USAGE:
-
-
-
 EXAMPLES:
 
 	Assemble some code:
 		vm_context* ctx = vm_create();
 		int num = vm_assemble("LDA #$01\nSTA $0200\nLDA #$05\nSTA $0201\nLDA #$08\nSTA $0202\n");	
 		vm_release();
+
+	Here is a more complex example:
+		// create context
+		vm_context* ctx = vm_create();
+		// assemble short piece of ASM
+		vm_assemble("LDA #$20\nSTA $0200\n");
+		// run it
+		vm_run();
+		// print accumulator
+		printf("A: %02X\n", ctx->registers[vm_registers::A]);
+		// and the value stored in memory
+		printf("Memory: %02X\n", ctx->read(0x200));
+		// dump registers
+		vm_dump_registers();
+		// and also the memory
+		vm_dump_memory(0x200, 16);
+		// we are done.	
+		vm_release();
+   
+		This will result in the following output:
+
+		A: 20
+		Memory: 20
+		------------- Dump -------------
+		A=$20 X=$00 Y=$00
+		PC=$0605 SP=$FF
+		CZIDBVN
+		0000000
+		---------- Memory dump -----------
+		0200 : 20 00 00 00 00 00 00 00
+		0208 : 00 00 00 00 00 00 00 00
 
 CHANGELIST:	
 	

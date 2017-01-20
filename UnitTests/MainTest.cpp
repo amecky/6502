@@ -4,16 +4,16 @@
 #include "..\6502.h"
 
 TEST_CASE("HexTest", "[StringTests]") {
-	REQUIRE(isHex('0') == true);
-	REQUIRE(isHex('A') == true);
-	REQUIRE(isHex('H') == false);
+	REQUIRE(vm_str_is_hex('0') == true);
+	REQUIRE(vm_str_is_hex('A') == true);
+	REQUIRE(vm_str_is_hex('H') == false);
 }
 
 TEST_CASE("Hex2Int", "[StringTests]") {
 	char* out = nullptr;
-	int ret = hex2int("0200", &out);
+	int ret = vm_str_hex2int("0200", &out);
 	REQUIRE(ret == 512);
-	ret = hex2int("C0", &out);
+	ret = vm_str_hex2int("C0", &out);
 	REQUIRE(ret == 192);
 }
 

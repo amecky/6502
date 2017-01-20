@@ -64,15 +64,16 @@ This method will assemble the given code to memory starting at 0x600
 ```c
 void vm_dump(int pc, int num);
 ```
+This method will dump the registers and CPU flags and also a part of the memory.
 
 ```c
 void vm_dump_registers();
 ```
-
+This method dumps the registers and CPU flags.
 ```c
-void vm_memory_dump(int pc, int num);
+void vm_dump_memory(int pc, int num);
 ```
-
+Will dump the memory
 
 ```c
 void vm_run();
@@ -82,7 +83,7 @@ Will run the byte code at location 0x600. Make sure that you have either loaded 
 ```c
 bool vm_step();
 ```
-
+This will execute one single command and the program counter will be moved to the next one.
 ```c
 void vm_reset();
 ```

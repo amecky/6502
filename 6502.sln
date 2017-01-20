@@ -1,11 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Express 2013 for Windows Desktop
-VisualStudioVersion = 12.0.40629.0
+# Visual Studio 14
+VisualStudioVersion = 14.0.23107.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "6502", "6502.vcxproj", "{5D6A731A-637C-469B-8261-5A6122047572}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "shell", "shell\vs_2013\shell.vcxproj", "{C9E969CF-C45D-4A94-8728-FE02575B0AD2}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "6502_Test", "UnitTests\6502_Test.vcxproj", "{93AC96E9-2AB8-46DF-A32B-B74B1271B2EE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{C9E969CF-C45D-4A94-8728-FE02575B0AD2}.Debug|Win32.Build.0 = Debug|Win32
 		{C9E969CF-C45D-4A94-8728-FE02575B0AD2}.Release|Win32.ActiveCfg = Release|Win32
 		{C9E969CF-C45D-4A94-8728-FE02575B0AD2}.Release|Win32.Build.0 = Release|Win32
+		{93AC96E9-2AB8-46DF-A32B-B74B1271B2EE}.Debug|Win32.ActiveCfg = Debug|Win32
+		{93AC96E9-2AB8-46DF-A32B-B74B1271B2EE}.Debug|Win32.Build.0 = Debug|Win32
+		{93AC96E9-2AB8-46DF-A32B-B74B1271B2EE}.Release|Win32.ActiveCfg = Release|Win32
+		{93AC96E9-2AB8-46DF-A32B-B74B1271B2EE}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

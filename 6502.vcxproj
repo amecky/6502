@@ -77,9 +77,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="6502.cpp" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="6502.h" />
   </ItemGroup>
   <ItemGroup>
