@@ -89,6 +89,7 @@ BEGIN_MESSAGE_MAP(CAC64Dlg, CDialogEx)
 	ON_BN_CLICKED(IDC_SAVE_TEXT, &CAC64Dlg::OnBnClickedSaveText)
 	ON_BN_CLICKED(IDC_COMPILE, &CAC64Dlg::OnBnClickedCompile)
 	ON_EN_CHANGE(IDC_REG_X, &CAC64Dlg::OnEnChangeRegX)
+	ON_BN_CLICKED(IDC_DISASSEMBLE, &CAC64Dlg::OnBnClickedDisassemble)
 END_MESSAGE_MAP()
 
 
@@ -379,16 +380,36 @@ void CAC64Dlg::OnBnClickedStep() {
 	_statucBarCtrl.SetText(str, 0, 0);
 }
 
-
-void CAC64Dlg::OnBnClickedLoadBin()
-{
-	// TODO: Fügen Sie hier Ihren Kontrollbehandlungscode für die Benachrichtigung ein.
+// ----------------------------------------------------
+// Load binary 
+// ----------------------------------------------------
+void CAC64Dlg::OnBnClickedLoadBin() {
+	CFileDialog fileDlg(TRUE, _T("prg"), _T("*.prg"),
+		OFN_FILEMUSTEXIST | OFN_HIDEREADONLY, _T("PRG Files(*.prg) | *.prg | All Files(*.*) | *.* || "), this);
+	CString filename;
+	if (fileDlg.DoModal() == IDOK) {
+		filename = fileDlg.GetPathName();
+		CT2A ascii(filename);
+		vm_load(ascii.m_szBuffer);
+		dumpMemory();
+		updateCPUState();
+	}
 }
 
-
-void CAC64Dlg::OnBnClickedSaveBin()
-{
-	// TODO: Fügen Sie hier Ihren Kontrollbehandlungscode für die Benachrichtigung ein.
+// ----------------------------------------------------
+// Save binary 
+// ----------------------------------------------------
+void CAC64Dlg::OnBnClickedSaveBin() {
+	CFileDialog fileDlg(FALSE, _T("prg"), _T("*.prg"),
+		OFN_FILEMUSTEXIST | OFN_HIDEREADONLY, _T("PRG Files(*.prg) | *.prg | All Files(*.*) | *.* || "), this);
+	CString filename;
+	if (fileDlg.DoModal() == IDOK) {
+		filename = fileDlg.GetPathName();
+		CT2A ascii(filename);
+		vm_save(ascii.m_szBuffer);
+		CString str(_ctx->debug);
+		_statucBarCtrl.SetText(str, 0, 0);
+	}
 }
 
 // ----------------------------------------------------
@@ -430,4 +451,14 @@ void CAC64Dlg::OnEnChangeRegX()
 	// with the ENM_CHANGE flag ORed into the mask.
 
 	// TODO:  Add your control notification handler code here
+}
+
+// ----------------------------------------------------
+// Disassemble the binary code 
+// ----------------------------------------------------
+void CAC64Dlg::OnBnClickedDisassemble() {
+	std::string code;
+	vm_disassemble(code);
+	CString txt(code.c_str());
+	_asmCode.SetWindowTextW(txt);
 }

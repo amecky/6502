@@ -72,4 +72,5 @@ private:
 public:
 	afx_msg void OnBnClickedCompile();
 	afx_msg void OnEnChangeRegX();
+	afx_msg void OnBnClickedDisassemble();
 };

@@ -20,14 +20,18 @@ const char* BRANCHING = "LDX #$08\ndecrement:\nDEX\nSTX $0200\nCPX #$03\nBNE dec
 
 int _tmain(int argc, _TCHAR* argv[]) {
 	vm_context* ctx = vm_create();
-	int nc = 0;
-	//vm_assemble(BRANCHING);
-	vm_assemble_file("test.txt");
+	vm_assemble("LDA #$20\nSTA $0200\n");
 	vm_run();
+	printf("A: %02X\n", ctx->registers[vm_registers::A]);
+	printf("Memory: %02X\n", ctx->read(0x200));
 	vm_dump_registers();
-	vm_dump(0x00, 16);
-	vm_dump(0x100, 256);
-	vm_dump(0x200, 16);
+	vm_dump_memory(0x200, 16);
+	//vm_assemble_file("test.txt");
+	//vm_run();
+	//vm_dump_registers();
+	//vm_dump(0x00, 16);
+	//vm_dump(0x100, 256);
+	//vm_dump(0x200, 16);
 	vm_release();
 	return 0;
 }

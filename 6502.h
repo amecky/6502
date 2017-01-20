@@ -17,7 +17,8 @@ API:
 
 	bool vm_load(const char* fileName);
 
-	void vm_save(const char* fileName);
+	bool vm_save(const char* fileName);
+		This method will save the binary content to a file. 
 
 	int vm_assemble_file(const char* fileName);
 		Loads a text file containing some code and will assemble it.
@@ -32,7 +33,7 @@ API:
 
 	void vm_dump_registers();
 
-	void vm_memory_dump(int pc, int num);
+	void vm_dump_memory(int pc, int num);
 
 	bool vm_step();
 		Single step through the code. If you want to start from the beginning of the code set the
@@ -214,7 +215,7 @@ void vm_release();
 
 bool vm_load(const char* fileName);
 
-void vm_save(const char* fileName);
+bool vm_save(const char* fileName);
 
 int vm_assemble_file(const char* fileName);
 
@@ -226,7 +227,7 @@ void vm_dump(uint16_t pc, uint16_t num);
 
 void vm_dump_registers();
 
-void vm_memory_dump(uint16_t pc, uint16_t num);
+void vm_dump_memory(uint16_t pc, uint16_t num);
 
 bool vm_step();
 
@@ -1466,6 +1467,9 @@ typedef struct vm_token {
 
 typedef std::vector<vm_token> TokenList;
 
+// -----------------------------------------------------------------
+// Internal read file into char
+// -----------------------------------------------------------------
 PRIVATE char* read_file(const char* fileName) {
 	FILE *fp = fopen(fileName, "r");
 	if (fp) {
@@ -1481,31 +1485,36 @@ PRIVATE char* read_file(const char* fileName) {
 	return 0;
 }
 
-PRIVATE bool isDigit(const char* c) {
-	if ((*c >= '0' && *c <= '9')) {
-		return true;
-	}
-	return false;
+// -----------------------------------------------------------------
+// Internal check if character is a digit
+// -----------------------------------------------------------------
+PRIVATE bool vm_str_is_digit(const char* c) {
+	return ((*c >= '0' && *c <= '9'));
 }
 
-PRIVATE bool isNumeric(const char c) {
-	return ((c >= '0' && c <= '9'));
-}
-
-PRIVATE bool isHex(const char c) {
+// -----------------------------------------------------------------
+// Internal check if character is part of a hex number
+// -----------------------------------------------------------------
+PRIVATE bool vm_str_is_hex(const char c) {
 	return ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
 }
 
-PRIVATE bool isWhitespace(const char c) {
+// -----------------------------------------------------------------
+// Internal check if character is whitespace
+// -----------------------------------------------------------------
+PRIVATE bool vm_str_is_whitespace(const char c) {
 	if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
 		return true;
 	}
 	return false;
 }
 
-PRIVATE int hex2int(const char *hex, char** endPtr) {
+// -----------------------------------------------------------------
+// Internal hex to int conversion
+// -----------------------------------------------------------------
+PRIVATE int vm_str_hex2int(const char *hex, char** endPtr) {
 	int val = 0;
-	while (isHex(*hex)) {
+	while (vm_str_is_hex(*hex)) {
 		char byte = *hex++;
 		if (byte >= '0' && byte <= '9') byte = byte - '0';
 		else if (byte >= 'a' && byte <= 'f') byte = byte - 'a' + 10;
@@ -1518,8 +1527,11 @@ PRIVATE int hex2int(const char *hex, char** endPtr) {
 	return val;
 }
 
-PRIVATE float str2f(const char* p, char** endPtr) {
-	while (isWhitespace(*p)) {
+// -----------------------------------------------------------------
+// internal string to float
+// -----------------------------------------------------------------
+PRIVATE float vm_str_str2f(const char* p, char** endPtr) {
+	while (vm_str_is_whitespace(*p)) {
 		++p;
 	}
 	float sign = 1.0f;
@@ -1531,7 +1543,7 @@ PRIVATE float str2f(const char* p, char** endPtr) {
 		++p;
 	}
 	float value = 0.0f;
-	while (isNumeric(*p)) {
+	while (vm_str_is_digit(p)) {
 		value *= 10.0f;
 		value = value + (*p - '0');
 		++p;
@@ -1540,7 +1552,7 @@ PRIVATE float str2f(const char* p, char** endPtr) {
 		++p;
 		float dec = 1.0f;
 		float frac = 0.0f;
-		while (isNumeric(*p)) {
+		while (vm_str_is_digit(p)) {
 			frac *= 10.0f;
 			frac = frac + (*p - '0');
 			dec *= 10.0f;
@@ -1555,125 +1567,8 @@ PRIVATE float str2f(const char* p, char** endPtr) {
 }
 
 // -----------------------------------------------------------------
-// Tokenizer
+// Internal method to check if the current location is a text
 // -----------------------------------------------------------------
-/*
-class Tokenizer {
-
-public:
-	Tokenizer::Tokenizer() : _text(nullptr), _created(false) {
-	}
-
-	Tokenizer::~Tokenizer() {
-		if (_text != nullptr && _created) {
-			delete[] _text;
-		}
-	}
-
-	bool Tokenizer::parseFile(const char* fileName) {
-		_text = read_file(fileName);
-		_created = true;
-		if (_text == 0) {
-			return false;
-		}
-		return parse(_text);
-	}
-
-	// FIXME: support comments which starts with ;
-	bool Tokenizer::parse(const char* text) {
-		_text = text;
-		int cnt = 0;
-		const char* p = _text;
-		int line = 1;
-		while (*p != 0) {
-			vm_token token(vm_token::EMPTY);
-			if (isText(p)) {
-				const char *identifier = p;
-				while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z'))
-					p++;
-				token = vm_token(vm_token::STRING);
-				int cmdIdx = find_command(identifier);
-				if (cmdIdx != -1) {
-					token = vm_token(vm_token::COMMAND, cmdIdx);
-				}
-				else {
-					int l = p - identifier;
-					if (strncmp("A", identifier, l) == 0) {
-						token = vm_token(vm_token::ACCUMULATOR);
-					}
-					else {
-						token.hash = fnv1a(identifier, p - identifier);
-					}
-				}
-			}
-			else if (isHex(*p)) {
-				const char* before = p - 1;
-				if (*before == '$') {
-					char *out;
-					token = vm_token(vm_token::NUMBER, hex2int(p, &out));
-					p = out;
-				}
-			}
-			else if (isDigit(p)) {
-				char *out;
-				token = vm_token(vm_token::NUMBER, str2f(p, &out));
-				p = out;
-			}
-			else if (*p == ';') {
-				while (*p != '\n')
-					p++;
-			}
-			else {
-				switch (*p) {
-				case '(': token = vm_token(vm_token::OPEN_BRACKET); break;
-				case ')': token = vm_token(vm_token::CLOSE_BRACKET); break;
-				case ' ': case '\t': case '\r': break;
-				case '\n': ++line; break;
-				case ':': token = vm_token(vm_token::SEPARATOR); break;
-				case 'X': token = vm_token(vm_token::X); break;
-				case 'Y': token = vm_token(vm_token::Y); break;
-				case 'A': token = vm_token(vm_token::ACCUMULATOR); break;
-				case '#': token = vm_token(vm_token::HASHTAG); break;
-				case ',': token = vm_token(vm_token::COMMA); break;
-				}
-				++p;
-			}
-			if (token.type != vm_token::EMPTY) {
-				token.line = line;
-				_tokens.push_back(token);
-			}
-		}
-		return true;
-	}
-
-	size_t num() const {
-		return _tokens.size();
-	}
-
-	const vm_token& get(size_t index) const {
-		return _tokens[index];
-	}
-
-private:
-	bool Tokenizer::isText(const char* p) {
-		const char* prev = p - 1;
-		if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')) {
-			if (prev >= _text && *prev == '$') {
-				return false;
-			}
-			if (prev >= _text && *prev == ',') {
-				return false;
-			}
-			return true;
-		}
-		return false;
-	}
-
-	std::vector<vm_token> _tokens;
-	const char* _text;
-	bool _created;
-};
-*/
 PRIVATE bool vm_is_text(const char* p, const char* beginning) {
 	const char* prev = p - 1;
 	if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')) {
@@ -1688,8 +1583,10 @@ PRIVATE bool vm_is_text(const char* p, const char* beginning) {
 	return false;
 }
 
+// -----------------------------------------------------------------
+// Tokenize a given text 
+// -----------------------------------------------------------------
 PRIVATE bool vm_tokenize(const char* text,TokenList& tokens) {
-	//_text = text;
 	int cnt = 0;
 	const char* p = text;
 	int line = 1;
@@ -1714,17 +1611,17 @@ PRIVATE bool vm_tokenize(const char* text,TokenList& tokens) {
 				}
 			}
 		}
-		else if (isHex(*p)) {
+		else if (vm_str_is_hex(*p)) {
 			const char* before = p - 1;
 			if (*before == '$') {
 				char *out;
-				token = vm_token(vm_token::NUMBER, hex2int(p, &out));
+				token = vm_token(vm_token::NUMBER, vm_str_hex2int(p, &out));
 				p = out;
 			}
 		}
-		else if (isDigit(p)) {
+		else if (vm_str_is_digit(p)) {
 			char *out;
-			token = vm_token(vm_token::NUMBER, str2f(p, &out));
+			token = vm_token(vm_token::NUMBER, vm_str_str2f(p, &out));
 			p = out;
 		}
 		else if (*p == ';') {
@@ -1754,7 +1651,9 @@ PRIVATE bool vm_tokenize(const char* text,TokenList& tokens) {
 	return true;
 }
 
-
+// -----------------------------------------------------------------
+// Translate vm_token into string
+// -----------------------------------------------------------------
 PRIVATE const char* translate_token_tpye(const vm_token& t) {
 	switch (t.type) {
 		case vm_token::EMPTY: return "EMPTY"; break;
@@ -1894,22 +1793,21 @@ void vm_disassemble(std::string& out) {
 			uint8_t hex = _internal_ctx->read(pc);
 			const vm_command_mapping& mapping = get_command_mapping(hex);
 			const vm_command& cmd = VM_COMMANDS[mapping.op_code];
-			//printf("%04X ", pc);
-			//printf("%s ", cmd.name);
 			switch (mapping.mode) {
-				case IMMEDIDATE: sprintf_s(buffer,"%04X %s #$%02X\n", pc, cmd.name, _internal_ctx->read(pc + 1)); break;
-				case ABSOLUTE_ADR: sprintf_s(buffer, "%04X %s $%04X\n", pc, cmd.name, _internal_ctx->readInt(pc + 1)); break;
-				case ABSOLUTE_X: sprintf_s(buffer, "%04X %s $%04X,X\n", pc, cmd.name, _internal_ctx->readInt(pc + 1)); break;
-				case ABSOLUTE_Y: sprintf_s(buffer, "%04X %s $%04X,Y\n", pc, cmd.name, _internal_ctx->readInt(pc + 1)); break;
-				case ZERO_PAGE: sprintf_s(buffer, "%04X %s $%02X\n", pc, cmd.name, _internal_ctx->read(pc + 1)); break;
-				case ZERO_PAGE_X: sprintf_s(buffer, "%04X %s $%02X,X\n", pc, cmd.name, _internal_ctx->read(pc + 1)); break;
-				case ZERO_PAGE_Y: sprintf_s(buffer, "%04X %s $%02X,Y\n", pc, cmd.name, _internal_ctx->read(pc + 1)); break;
-				case INDIRECT_X: sprintf_s(buffer, "%04X %s $(%04X),X\n", pc, cmd.name, _internal_ctx->readInt(pc + 1)); break;
-				case INDIRECT_Y: sprintf_s(buffer, "%04X %s $(%04X),Y\n", pc, cmd.name, _internal_ctx->readInt(pc + 1)); break;
-				case RELATIVE_ADR: sprintf_s(buffer, "%04X %s $%02X\n", pc, cmd.name, _internal_ctx->read(pc + 1)); break;
-				case ACCUMULATOR: sprintf_s(buffer, "%04X %s A\n", pc, cmd.name); break;
+				case NONE: sprintf_s(buffer, "%s\r\n", cmd.name); break;
+				case IMMEDIDATE: sprintf_s(buffer,"%s #$%02X\r\n", cmd.name, _internal_ctx->read(pc + 1)); break;
+				case ABSOLUTE_ADR: sprintf_s(buffer, "%s $%04X\r\n", cmd.name, _internal_ctx->readInt(pc + 1)); break;
+				case ABSOLUTE_X: sprintf_s(buffer, "%s $%04X,X\r\n", cmd.name, _internal_ctx->readInt(pc + 1)); break;
+				case ABSOLUTE_Y: sprintf_s(buffer, "%s $%04X,Y\r\n", cmd.name, _internal_ctx->readInt(pc + 1)); break;
+				case ZERO_PAGE: sprintf_s(buffer, "%s $%02X\r\n", cmd.name, _internal_ctx->read(pc + 1)); break;
+				case ZERO_PAGE_X: sprintf_s(buffer, "%s $%02X,X\r\n", cmd.name, _internal_ctx->read(pc + 1)); break;
+				case ZERO_PAGE_Y: sprintf_s(buffer, "%s $%02X,Y\r\n", cmd.name, _internal_ctx->read(pc + 1)); break;
+				case INDIRECT_X: sprintf_s(buffer, "%s $(%04X),X\r\n", cmd.name, _internal_ctx->readInt(pc + 1)); break;
+				case INDIRECT_Y: sprintf_s(buffer, "%s $(%04X),Y\r\n", cmd.name, _internal_ctx->readInt(pc + 1)); break;
+				case RELATIVE_ADR: sprintf_s(buffer, "%s $%02X\r\n", cmd.name, _internal_ctx->read(pc + 1)); break;
+				case ACCUMULATOR: sprintf_s(buffer, "%s A\r\n", cmd.name); break;
+				default: sprintf_s(buffer, "???\r\n"); break;
 			}
-			//printf("\n");
 			out += buffer;
 			pc += VM_DATA_SIZE[mapping.mode] + 1;
 		}
@@ -1929,13 +1827,13 @@ typedef struct vm_label_definition {
 // convert tokens 
 // -----------------------------------------------------------------
 PRIVATE int assemble(const TokenList& tokens, vm_context* ctx, uint16_t* numCommands) {
-	vm_log("tokens: %d", tokens.size());
+	//vm_log("tokens: %d", tokens.size());
 	uint16_t pc = 0x600;
 	std::vector<vm_label_definition> definitions;
 	std::vector<vm_label_definition> branches;
 	for (size_t i = 0; i < tokens.size(); ++i) {
 		const vm_token& t = tokens[i];
-		vm_log("%d = %s (line: %d)", i, translate_token_tpye(t), t.line);
+		//vm_log("%d = %s (line: %d)", i, translate_token_tpye(t), t.line);
 		if (t.type == vm_token::COMMAND) {
 			if (numCommands != nullptr) {
 				++*numCommands;
@@ -1946,7 +1844,7 @@ PRIVATE int assemble(const TokenList& tokens, vm_context* ctx, uint16_t* numComm
 				mode = get_addressing_mode(tokens, i);
 			}
 			uint8_t hex = get_hex_value(t, mode);
-			vm_log("=> index: %d  mode: %s cmd: %s (%X)", t.value, translate_addressing_mode(mode), cmd.name, hex);
+			//vm_log("=> index: %d  mode: %s cmd: %s (%X)", t.value, translate_addressing_mode(mode), cmd.name, hex);
 			ctx->write(pc++, hex);
 			if (mode == vm_addressing_mode::IMMEDIDATE) {
 				const vm_token& next = tokens[i + 2];
@@ -2026,8 +1924,7 @@ int vm_assemble_file(const char* fileName) {
 			TokenList tokens;
 			if (vm_tokenize(code, tokens)) {
 				_internal_ctx->numBytes = assemble(tokens, _internal_ctx, &_internal_ctx->numCommands);
-				//save(buffer);
-				vm_memory_dump(0x600, _internal_ctx->numBytes);
+				vm_dump_memory(0x600, _internal_ctx->numBytes);
 				return _internal_ctx->numBytes;
 			}
 			delete[] code;
@@ -2044,12 +1941,9 @@ int vm_assemble_file(const char* fileName) {
 // ---------------------------------------------------------
 int vm_assemble(const char* code) {
 	if (_internal_ctx != nullptr) {
-		//Tokenizer tokenizer;
 		TokenList tokens;
 		if (vm_tokenize(code,tokens)) {
 			_internal_ctx->numBytes = assemble(tokens, _internal_ctx, &_internal_ctx->numCommands);
-			//save(buffer);
-			vm_memory_dump(0x600, _internal_ctx->numBytes);
 			return _internal_ctx->numBytes;
 		}
 	}
@@ -2061,7 +1955,7 @@ int vm_assemble(const char* code) {
 // ---------------------------------------------------------
 void vm_dump(uint16_t pc, uint16_t num) {
 	vm_dump_registers();
-	vm_memory_dump(pc, num);
+	vm_dump_memory(pc, num);
 }
 
 // ---------------------------------------------------------
@@ -2091,7 +1985,7 @@ void vm_dump_registers() {
 // ---------------------------------------------------------
 //  memory dump
 // ---------------------------------------------------------
-void vm_memory_dump(uint16_t pc, uint16_t num) {
+void vm_dump_memory(uint16_t pc, uint16_t num) {
 	if (_internal_ctx != nullptr) {
 		printf("---------- Memory dump -----------");
 		for (size_t i = 0; i < num; ++i) {
@@ -2169,7 +2063,7 @@ PRIVATE bool vm_step() {
 		int data = get_data(_internal_ctx, mode);
 		int add = VM_DATA_SIZE[mode] + 1;
 		(*cmd.function)(_internal_ctx, data, mode);
-		printf("%04X %s (%02X) data: %04X mode: %s add: %d\n", _internal_ctx->programCounter, cmd.name, cmdIdx, data, translate_addressing_mode(mode),add);
+		//printf("%04X %s (%02X) data: %04X mode: %s add: %d\n", _internal_ctx->programCounter, cmd.name, cmdIdx, data, translate_addressing_mode(mode),add);
 		sprintf_s(_internal_ctx->debug,"%04X %s (%02X) data: %04X mode: %s add: %d\n", _internal_ctx->programCounter, cmd.name, cmdIdx, data, translate_addressing_mode(mode), add);
 		if (!cmd.modifyPC) {
 			_internal_ctx->programCounter += add;
@@ -2215,10 +2109,10 @@ bool vm_load(const char* fileName) {
 				_internal_ctx->write(pc + i, v);
 			}
 			fclose(fp);
-			printf("Loaded bytes: %d commands: %d\n", _internal_ctx->numBytes, _internal_ctx->numCommands);
+			sprintf_s(_internal_ctx->debug, "File '%s' loaded bytes: %d commands: %d\n", fileName, _internal_ctx->numBytes, _internal_ctx->numCommands);
 			return true;
 		}
-		printf("file '%s' not found", fileName);
+		sprintf_s(_internal_ctx->debug, "File '%s' not found", fileName);
 	}
 	return false;
 }
@@ -2226,7 +2120,7 @@ bool vm_load(const char* fileName) {
 // ---------------------------------------------------------
 //  save binary file
 // ---------------------------------------------------------
-void vm_save(const char* fileName) {
+bool vm_save(const char* fileName) {
 	if (_internal_ctx != nullptr) {
 		FILE* fp = fopen(fileName, "wb");
 		if (fp) {
@@ -2238,8 +2132,12 @@ void vm_save(const char* fileName) {
 				fwrite(&v, sizeof(uint8_t), 1, fp);
 			}
 			fclose(fp);
+			sprintf_s(_internal_ctx->debug, "File %s written with %d num bytes", fileName, _internal_ctx->numBytes);
+			return true;
 		}
 	}
+	sprintf_s(_internal_ctx->debug, "Cannot write file %s", fileName);
+	return false;
 }
 
 #endif

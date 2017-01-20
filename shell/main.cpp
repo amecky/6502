@@ -170,7 +170,7 @@ public:
 		char buffer[128];
 		line.get_string(1, buffer);
 		int pc = hex2int(buffer);
-		vm_memory_dump(pc, 128);
+		vm_dump_memory(pc, 128);
 	}
 	void write_syntax() {
 		printf("dump - dump memory\n");
